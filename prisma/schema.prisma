@@ -1,0 +1,50 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Network {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  devices   Device[]
+}
+
+model Device {
+  id        String   @id @default(uuid())
+  networkId String
+  network   Network  @relation(fields: [networkId], references: [id])
+  name      String
+  type      String   // OLT, Splitter, ONU, Switch, PatchPanel, Amplifier
+  model     String?
+  x         Int
+  y         Int
+  status    String   // OK, WARNING, FAILURE
+  ports     Port[]
+}
+
+model Port {
+  id          String   @id @default(uuid())
+  deviceId    String
+  device      Device   @relation(fields: [deviceId], references: [id])
+  portNumber  Int
+  portType    String   // IN, OUT, BIDIRECTIONAL
+  status      String   // UP, DOWN
+  outgoingLink Link?   @relation("SourcePort")
+  incomingLink Link?   @relation("TargetPort")
+}
+
+model Link {
+  id           String   @id @default(uuid())
+  sourcePortId String   @unique
+  sourcePort   Port     @relation("SourcePort", fields: [sourcePortId], references: [id])
+  targetPortId String   @unique
+  targetPort   Port     @relation("TargetPort", fields: [targetPortId], references: [id])
+  fiberLength  Float
+  fiberType    String   // SMF, MMF
+  status       String   // OK, BROKEN
+}
