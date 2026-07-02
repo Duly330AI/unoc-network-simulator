@@ -117,6 +117,10 @@ The same four steps are wrapped in `scripts/start-postgres.ps1`,
 `scripts/start-engine.ps1`, `scripts/start-backend.ps1`,
 `scripts/start-frontend.ps1` (thin wrappers, no destructive operations).
 
+Use `scripts/status-stack.ps1` to inspect the local stack before starting more
+processes. It reports the expected ports, listener PIDs, process names, command
+lines when available, work-copy matches, and read-only HTTP health checks.
+
 ## Quick verification
 
 ```powershell
@@ -129,8 +133,26 @@ curl.exe -s http://127.0.0.1:5001/api/devices/olt1/interfaces # interfaces (seed
 
 ## Shutdown
 
-Stop backend/engine/frontend processes (Ctrl+C or stop the background
-processes), then:
+For a safe preview of what would be stopped:
+
+```powershell
+.\scripts\stop-stack.ps1 -DryRun
+```
+
+For controlled shutdown:
+
+```powershell
+.\scripts\stop-stack.ps1
+```
+
+The shutdown helper runs `docker compose stop postgres` for the Postgres
+service only. For the engine, backend, and frontend ports it inspects listener
+PIDs and command lines, asks before stopping matched local processes, and skips
+unknown port owners instead of blindly killing by port. Use `-Force` only when
+you have already reviewed the targets, for example after `-DryRun`.
+
+Manual shutdown is also fine: stop backend/engine/frontend processes (Ctrl+C or
+stop the background processes), then:
 
 ```powershell
 docker compose stop postgres
