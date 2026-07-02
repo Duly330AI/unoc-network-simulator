@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -84,6 +85,7 @@ func (s *PortSummaryService) LoadInitialState() error {
 
 	log.Println("Loading initial state from database...")
 	start := time.Now()
+	s.resetStateLocked()
 
 	// BATCH LOAD 1: All devices
 	if err := s.loadDevices(); err != nil {
@@ -112,6 +114,16 @@ func (s *PortSummaryService) LoadInitialState() error {
 		len(s.devices), len(s.interfaces), len(s.links), elapsed)
 
 	return nil
+}
+
+func (s *PortSummaryService) resetStateLocked() {
+	s.devices = make(map[string]*Device)
+	s.interfaces = make(map[string]*Interface)
+	s.links = make(map[string]*Link)
+	s.ponOccupancy = make(map[string]map[string]int)
+	s.opticalPaths = make(map[string]string)
+	s.deviceInterfaces = make(map[string][]*Interface)
+	s.interfaceLinks = make(map[string][]*Link)
 }
 
 // loadDevices loads all devices from database
@@ -256,7 +268,7 @@ func (s *PortSummaryService) computeOpticalPaths() {
 	// Find all ONT devices
 	ontCount := 0
 	for _, device := range s.devices {
-		if device.Type != "ONT" {
+		if !strings.EqualFold(device.Type, "ONT") {
 			continue
 		}
 		ontCount++
@@ -387,6 +399,10 @@ func (s *PortSummaryService) computePONOccupancy() {
 
 // GetPortSummary returns port summary for a single device
 func (s *PortSummaryService) GetPortSummary(ctx context.Context, req *pb.DeviceRequest) (*pb.PortSummaryResponse, error) {
+	if err := s.LoadInitialState(); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to refresh topology state: %v", err)
+	}
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -394,20 +410,24 @@ func (s *PortSummaryService) GetPortSummary(ctx context.Context, req *pb.DeviceR
 		return nil, status.Error(codes.InvalidArgument, "device_id is required")
 	}
 
+	return s.buildPortSummaryLocked(req.DeviceId), nil
+}
+
+func (s *PortSummaryService) buildPortSummaryLocked(deviceID string) *pb.PortSummaryResponse {
 	// Get device to verify it exists
-	device := s.devices[req.DeviceId]
+	device := s.devices[deviceID]
 	if device == nil {
 		return &pb.PortSummaryResponse{
 			Interfaces: []*pb.InterfaceSummary{},
-		}, nil
+		}
 	}
 
 	// Get interfaces for the device (O(1) lookup thanks to index!)
-	interfaces := s.deviceInterfaces[req.DeviceId]
+	interfaces := s.deviceInterfaces[deviceID]
 	if len(interfaces) == 0 {
 		return &pb.PortSummaryResponse{
 			Interfaces: []*pb.InterfaceSummary{},
-		}, nil
+		}
 	}
 
 	// Build interface summaries
@@ -434,7 +454,7 @@ func (s *PortSummaryService) GetPortSummary(ctx context.Context, req *pb.DeviceR
 
 	return &pb.PortSummaryResponse{
 		Interfaces: summaries,
-	}, nil
+	}
 }
 
 // getCapacity returns the capacity for an interface based on its port_role
@@ -466,14 +486,17 @@ func (s *PortSummaryService) getCapacity(iface *Interface, portRole string) *int
 
 // GetBulkPortSummary returns port summaries for multiple devices
 func (s *PortSummaryService) GetBulkPortSummary(ctx context.Context, req *pb.BulkDeviceRequest) (*pb.BulkPortSummaryResponse, error) {
+	if err := s.LoadInitialState(); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to refresh topology state: %v", err)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	result := make(map[string]*pb.PortSummaryResponse)
 
 	for _, deviceID := range req.DeviceIds {
-		summary, err := s.GetPortSummary(ctx, &pb.DeviceRequest{DeviceId: deviceID})
-		if err != nil {
-			return nil, err
-		}
-		result[deviceID] = summary
+		result[deviceID] = s.buildPortSummaryLocked(deviceID)
 	}
 
 	return &pb.BulkPortSummaryResponse{

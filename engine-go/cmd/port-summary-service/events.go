@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/lib/pq"
@@ -114,7 +115,7 @@ func (s *PortSummaryService) handleEvent(channel string, payload string) {
 		s.handleDeviceEvent(payload)
 
 	case "topology_events":
-		if payload == "topology_version_change" {
+		if eventType, _ := parseEventPayload(payload); EventType(eventType) == EventTopologyChange {
 			log.Println("🔄 Topology version changed, performing full reload...")
 			if err := s.LoadInitialState(); err != nil {
 				log.Printf("❌ Full reload failed: %v", err)
@@ -128,28 +129,39 @@ func (s *PortSummaryService) handleEvent(channel string, payload string) {
 	}
 }
 
+func parseEventPayload(payload string) (string, string) {
+	parts := strings.SplitN(payload, ":", 2)
+	eventType := strings.TrimSpace(parts[0])
+	if len(parts) == 1 {
+		return eventType, ""
+	}
+	return eventType, strings.TrimSpace(parts[1])
+}
+
+func (s *PortSummaryService) reloadAllForEvent(eventLabel string) {
+	log.Printf("🔄 %s received, performing full topology reload", eventLabel)
+	if err := s.LoadInitialState(); err != nil {
+		log.Printf("❌ Full reload failed after %s: %v", eventLabel, err)
+		return
+	}
+	log.Printf("✅ Full reload completed after %s", eventLabel)
+}
+
 // handleLinkEvent processes link creation/deletion events
 func (s *PortSummaryService) handleLinkEvent(payload string) {
 	// Parse payload format: "link_created:LINK-001" or "link_deleted:LINK-001"
-	var eventType, linkID string
-	if _, err := fmt.Sscanf(payload, "%[^:]:%s", &eventType, &linkID); err != nil {
+	eventType, linkID := parseEventPayload(payload)
+	if eventType == "" {
 		log.Printf("Failed to parse link event payload: %s", payload)
 		return
 	}
 
 	switch EventType(eventType) {
-	case EventLinkCreated, EventLinkUpdated:
-		// Reload the affected link and recompute affected devices
-		s.reloadLink(linkID)
-
-	case EventLinkDeleted:
-		// Remove link from cache and recompute
-		s.mu.Lock()
-		delete(s.links, linkID)
-		s.mu.Unlock()
-		log.Printf("🗑️  Link %s removed from cache", linkID)
-		// Recompute PON occupancy for affected OLTs
-		s.recomputeAffectedOLTs(linkID)
+	case EventLinkCreated, EventLinkUpdated, EventLinkDeleted:
+		if linkID == "" {
+			log.Printf("Link event %s had no link id; refreshing all topology", eventType)
+		}
+		s.reloadAllForEvent(eventType)
 
 	default:
 		log.Printf("Unknown link event type: %s", eventType)
@@ -159,24 +171,24 @@ func (s *PortSummaryService) handleLinkEvent(payload string) {
 // handleDeviceEvent processes device provisioning events
 func (s *PortSummaryService) handleDeviceEvent(payload string) {
 	// Parse payload format: "device_provisioned:DEV-001" or "device_deleted:DEV-001"
-	var eventType, deviceID string
-	if _, err := fmt.Sscanf(payload, "%[^:]:%s", &eventType, &deviceID); err != nil {
+	eventType, deviceID := parseEventPayload(payload)
+	if eventType == "" {
 		log.Printf("Failed to parse device event payload: %s", payload)
 		return
 	}
 
 	switch EventType(eventType) {
 	case EventDeviceCreated, EventDeviceUpdated:
-		// Reload device and its interfaces
-		s.reloadDevice(deviceID)
+		if deviceID == "" {
+			log.Printf("Device event %s had no device id; refreshing all topology", eventType)
+		}
+		s.reloadAllForEvent(eventType)
 
 	case EventDeviceDeleted:
-		// Remove device from cache
-		s.mu.Lock()
-		delete(s.devices, deviceID)
-		delete(s.deviceInterfaces, deviceID)
-		s.mu.Unlock()
-		log.Printf("🗑️  Device %s removed from cache", deviceID)
+		if deviceID == "" {
+			log.Printf("Device delete event had no device id; refreshing all topology")
+		}
+		s.reloadAllForEvent(eventType)
 
 	default:
 		log.Printf("Unknown device event type: %s", eventType)
