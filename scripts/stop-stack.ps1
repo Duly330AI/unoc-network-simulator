@@ -32,6 +32,10 @@ function Test-IsUnocProcess {
     $normalized = $CommandLine.Replace('/', '\')
     $markers = @(
         '\engine-go\',
+        '\optical-service.exe',
+        '\batch-service.exe',
+        '\status-service.exe',
+        '\port-summary-service.exe',
         '\run.py',
         '\unoc-frontend-v2\',
         '\scripts\start-engine.ps1',
@@ -40,6 +44,30 @@ function Test-IsUnocProcess {
     )
 
     foreach ($marker in $markers) {
+        if ($normalized.IndexOf($marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
+function Test-IsExpectedTargetProcess {
+    param(
+        [string]$CommandLine,
+        [string[]]$ExpectedMarkers
+    )
+
+    if (-not (Test-IsUnocProcess -CommandLine $CommandLine)) {
+        return $false
+    }
+
+    if (-not $ExpectedMarkers -or $ExpectedMarkers.Count -eq 0) {
+        return $true
+    }
+
+    $normalized = $CommandLine.Replace('/', '\')
+    foreach ($marker in $ExpectedMarkers) {
         if ($normalized.IndexOf($marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
             return $true
         }
@@ -74,7 +102,8 @@ function Get-PortOwner {
 function Stop-MatchedProcess {
     param(
         [string]$Name,
-        [int]$Port
+        [int]$Port,
+        [string[]]$ExpectedMarkers = @()
     )
 
     $listener = Get-PortOwner -Port $Port
@@ -85,13 +114,15 @@ function Stop-MatchedProcess {
 
     $pidToStop = [int]$listener.OwningProcess
     $details = Get-ProcessDetails -ProcessId $pidToStop
-    $isUnoc = Test-IsUnocProcess -CommandLine $details.CommandLine
+    $isExpected = Test-IsExpectedTargetProcess `
+        -CommandLine $details.CommandLine `
+        -ExpectedMarkers $ExpectedMarkers
 
     Write-Host "Port $Port ($Name): PID $pidToStop, process $($details.ProcessName)"
     Write-Host "Command line: $($details.CommandLine)"
 
-    if (-not $isUnoc) {
-        Write-Host "SKIP: PID $pidToStop was not confidently matched to this UNOC work copy." -ForegroundColor Yellow
+    if (-not $isExpected) {
+        Write-Host "SKIP: PID $pidToStop was not confidently matched to this UNOC work copy and expected $Name process." -ForegroundColor Yellow
         return
     }
 
@@ -123,12 +154,19 @@ Stop-ComposePostgres
 Write-Host ''
 
 $targets = @(
-    @{ Name = 'Go Traffic Engine'; Port = 8080 },
-    @{ Name = 'FastAPI backend'; Port = 5001 },
-    @{ Name = 'Vue/Vite frontend'; Port = 5173 }
+    @{ Name = 'Go Traffic Engine'; Port = 8080; ExpectedMarkers = @('\traffic-engine.exe', '\cmd\traffic-engine', '\scripts\start-engine.ps1') },
+    @{ Name = 'Optical PathFinder'; Port = 50051; ExpectedMarkers = @('\optical-service.exe', '\cmd\optical-service') },
+    @{ Name = 'Batch Operations'; Port = 50052; ExpectedMarkers = @('\batch-service.exe', '\cmd\batch-service') },
+    @{ Name = 'Status Propagation'; Port = 50053; ExpectedMarkers = @('\status-service.exe', '\cmd\status-service') },
+    @{ Name = 'Port Summary'; Port = 50054; ExpectedMarkers = @('\port-summary-service.exe', '\cmd\port-summary-service') },
+    @{ Name = 'FastAPI backend'; Port = 5001; ExpectedMarkers = @('run.py', '\scripts\start-backend.ps1') },
+    @{ Name = 'Vue/Vite frontend'; Port = 5173; ExpectedMarkers = @('\unoc-frontend-v2\', '\vite', '\scripts\start-frontend.ps1') }
 )
 
 foreach ($target in $targets) {
-    Stop-MatchedProcess -Name $target.Name -Port $target.Port
+    Stop-MatchedProcess `
+        -Name $target.Name `
+        -Port $target.Port `
+        -ExpectedMarkers $target.ExpectedMarkers
     Write-Host ''
 }
