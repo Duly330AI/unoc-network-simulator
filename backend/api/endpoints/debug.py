@@ -15,6 +15,12 @@ from backend.services.dependency_resolver import trace_l3_path_to_anchor
 from backend.services.layer_validation import validate_layer_isolation
 from backend.services.layered_state_model import resolve_layered_device_state
 from backend.services.optical_physics_model import resolve_optical_physics_state
+from backend.services.simulation_event_engine import (
+    SIMULATION_EVENT_TYPES,
+    build_simulation_event_log,
+    replay_simulation_events,
+    serialize_events,
+)
 from backend.services.subscriber_model import resolve_subscriber_model
 from backend.services.truth_model import build_truth_model
 
@@ -144,3 +150,48 @@ def get_truth_model():  # type: ignore[override]
         raise HTTPException(status_code=404, detail="Not Found")
     with get_session() as s:
         return build_truth_model(s)
+
+
+@router.get("/event-log")
+def get_event_log():  # type: ignore[override]
+    if not _dev_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    with get_session() as s:
+        events = build_simulation_event_log(s)
+        return {
+            "append_only": True,
+            "event_types": list(SIMULATION_EVENT_TYPES),
+            "event_count": len(events),
+            "events": serialize_events(events),
+            "direct_mutation_guard": {
+                "mode": "diagnostic_projection",
+                "note": "Current SQL write paths are legacy direct mutations; this debug stream is the canonical replay source for projections.",
+            },
+        }
+
+
+@router.get("/projections")
+def get_projections():  # type: ignore[override]
+    if not _dev_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    with get_session() as s:
+        return replay_simulation_events(build_simulation_event_log(s))
+
+
+@router.get("/replay")
+def get_replay(
+    from_index: int = Query(default=0, alias="from", ge=0),
+    to: int | None = Query(default=None, ge=0),
+):  # type: ignore[override]
+    if not _dev_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    with get_session() as s:
+        events = build_simulation_event_log(s)
+        end = len(events) if to is None else min(to + 1, len(events))
+        replay_window = events[from_index:end]
+        return {
+            "from": from_index,
+            "to": (end - 1) if replay_window else None,
+            "events": serialize_events(replay_window),
+            "projections": replay_simulation_events(replay_window),
+        }
