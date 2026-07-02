@@ -2,12 +2,14 @@ param(
     [switch]$NoFrontend,
     [switch]$NoBackend,
     [switch]$NoEngine,
+    [switch]$IncludeOptionalGoServices,
     [switch]$SkipHealthCheck
 )
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $repoRootFull = [System.IO.Path]::GetFullPath($repoRoot)
 $logsDir = Join-Path $repoRootFull 'logs'
+$defaultDatabaseUrl = 'postgresql://unoc:unocpw@localhost:5432/unocdb'
 
 function Get-PortOwner {
     param([int]$Port)
@@ -112,6 +114,63 @@ function Test-HttpEndpoint {
     }
 }
 
+function Enable-LocalPostgresUrlForGoServices {
+    if (-not $env:DATABASE_URL) {
+        $env:DATABASE_URL = "$defaultDatabaseUrl`?sslmode=disable"
+        return
+    }
+
+    if ($env:DATABASE_URL -notmatch 'sslmode=') {
+        if ($env:DATABASE_URL.Contains('?')) {
+            $env:DATABASE_URL = "$($env:DATABASE_URL)&sslmode=disable"
+        }
+        else {
+            $env:DATABASE_URL = "$($env:DATABASE_URL)?sslmode=disable"
+        }
+    }
+}
+
+function Start-OptionalGoServices {
+    $engineDir = Join-Path $repoRootFull 'engine-go'
+    Enable-LocalPostgresUrlForGoServices
+
+    $services = @(
+        @{ Name = 'Optical PathFinder'; Port = 50051; Exe = 'optical-service.exe'; LogPrefix = 'optical-service' },
+        @{ Name = 'Batch Operations'; Port = 50052; Exe = 'batch-service.exe'; LogPrefix = 'batch-service' },
+        @{ Name = 'Status Propagation'; Port = 50053; Exe = 'status-service.exe'; LogPrefix = 'status-service' },
+        @{ Name = 'Port Summary'; Port = 50054; Exe = 'port-summary-service.exe'; LogPrefix = 'port-summary-service'; EnvPort = '50054' }
+    )
+
+    foreach ($service in $services) {
+        $exePath = Join-Path $engineDir "bin\$($service.Exe)"
+
+        if ($service.EnvPort) {
+            $env:PORT = $service.EnvPort
+        }
+
+        try {
+            Start-LoggedProcess -Name $service.Name `
+                -Port $service.Port `
+                -WorkingDirectory $engineDir `
+                -FilePath $exePath `
+                -ArgumentList @() `
+                -StdoutLog (Join-Path $logsDir "$($service.LogPrefix).out.log") `
+                -StderrLog (Join-Path $logsDir "$($service.LogPrefix).err.log") `
+                -PidFile (Join-Path $logsDir "$($service.LogPrefix).pid")
+        }
+        catch {
+            Write-Host "OPTIONAL FAILED: $($service.Name): $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+        finally {
+            if ($service.EnvPort) {
+                Remove-Item Env:PORT -ErrorAction SilentlyContinue
+            }
+        }
+
+        Write-Host ''
+    }
+}
+
 New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 
 Write-Host 'UNOC logged background start' -ForegroundColor Cyan
@@ -146,6 +205,15 @@ else {
     Write-Host 'SKIP: Go Traffic Engine disabled by -NoEngine.' -ForegroundColor Yellow
 }
 
+if ($IncludeOptionalGoServices) {
+    Write-Host 'Starting optional Go/gRPC services' -ForegroundColor Cyan
+    Start-OptionalGoServices
+}
+else {
+    Write-Host 'SKIP: optional Go/gRPC services disabled. Use -IncludeOptionalGoServices to start them.' -ForegroundColor Yellow
+    Write-Host ''
+}
+
 if (-not $NoBackend) {
     $python = @('.venv\Scripts\python.exe', '.venv-audit\Scripts\python.exe') |
         ForEach-Object { Join-Path $repoRootFull $_ } |
@@ -156,7 +224,7 @@ if (-not $NoBackend) {
         Write-Host 'SKIP: backend venv not found. Create .venv or .venv-audit first.' -ForegroundColor Yellow
     }
     else {
-        if (-not $env:DATABASE_URL) { $env:DATABASE_URL = 'postgresql://unoc:unocpw@localhost:5432/unocdb' }
+        if (-not $env:DATABASE_URL) { $env:DATABASE_URL = $defaultDatabaseUrl }
         if (-not $env:UNOC_DEV_FEATURES) { $env:UNOC_DEV_FEATURES = '1' }
         if (-not $env:UNOC_DISABLE_RELOAD) { $env:UNOC_DISABLE_RELOAD = '1' }
 

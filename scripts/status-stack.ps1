@@ -92,6 +92,10 @@ function Test-HttpEndpoint {
 $ports = @(
     @{ Name = 'PostgreSQL'; Port = 5432 },
     @{ Name = 'Go Traffic Engine'; Port = 8080 },
+    @{ Name = 'Optical PathFinder'; Port = 50051 },
+    @{ Name = 'Batch Operations'; Port = 50052 },
+    @{ Name = 'Status Propagation'; Port = 50053 },
+    @{ Name = 'Port Summary'; Port = 50054 },
     @{ Name = 'FastAPI backend'; Port = 5001 },
     @{ Name = 'Vue/Vite frontend'; Port = 5173 }
 )

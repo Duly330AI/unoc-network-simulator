@@ -24,6 +24,7 @@ Every command below was verified end-to-end during the recovery run audit
 | Go optical service (gRPC)  | 50051 | optional (Python fallback) |
 | Go batch service (gRPC)    | 50052 | optional (Python fallback) |
 | Go status service (gRPC)   | 50053 | optional (Python fallback) |
+| Go port summary service (gRPC) | 50054 | optional (Python fallback/degrade) |
 
 Start order: **postgres → traffic-engine → backend → frontend**.
 
@@ -45,6 +46,7 @@ go build -o bin/traffic-engine.exe ./cmd/traffic-engine/
 go build -o bin/optical-service.exe ./cmd/optical-service/   # optional
 go build -o bin/batch-service.exe ./cmd/batch-service/       # optional
 go build -o bin/status-service.exe ./cmd/status-service/     # optional
+go build -o bin/port-summary-service.exe ./cmd/port-summary-service/ # optional
 cd ..
 
 # Environment file
@@ -135,6 +137,18 @@ frontend only when their expected ports are free. If a service is already
 listening, it prints the owning PID/process details instead of starting a
 duplicate. Use `scripts/status-stack.ps1` to inspect running services and
 `scripts/stop-stack.ps1` for controlled shutdown.
+
+To also start the optional Go/gRPC helper services with logs:
+
+```powershell
+.\scripts\start-stack-logged.ps1 -IncludeOptionalGoServices
+```
+
+This adds Optical PathFinder (`50051`), Batch Operations (`50052`), Status
+Propagation (`50053`), and Port Summary (`50054`). These services are optional
+because the backend can fall back or degrade when they are unavailable, but
+starting them reduces startup degraded-mode warnings and makes their logs
+available under `logs/`.
 
 ## Quick verification
 
