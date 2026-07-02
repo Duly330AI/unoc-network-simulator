@@ -22,7 +22,7 @@ export type InterfaceSummary = {
  *   - 3 DB queries total (vs 192 separate)
  *   - ~50-100ms (vs 3-5 seconds with rate limiting)
  */
-export function useBulkPortSummary(deviceIds: Ref<string[]>, pollMs = 2000) {
+export function useBulkPortSummary(deviceIds: Ref<string[]>, pollMs = 0) {
   const summaries = ref<Record<string, InterfaceSummary[]>>({})
   const loading = ref(false)
   const error = ref('')
