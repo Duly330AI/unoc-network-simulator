@@ -40,9 +40,9 @@ networkx~=3.3                # Graph algorithms (pathfinding layer §18)
 ############################
 anyio~=4.4.0                # Concurrency backend (FastAPI uses; pin for determinism)
 async-timeout~=4.0.3        # Safety around cancellation (if needed in tick loops)
-grpcio==1.68.1              # gRPC core library (latest stable with binary wheels)
-grpcio-tools==1.68.1        # Protocol buffer compiler (matches grpcio version)
-protobuf==5.29.2            # Protocol buffers (compatible with grpcio 1.68.x)
+grpcio==1.75.1              # gRPC core library (matches checked-in *_pb2_grpc.py gencode, which requires >=1.75.1)
+grpcio-tools==1.75.1        # Protocol buffer compiler (matches grpcio version)
+protobuf==6.31.1            # Protocol buffers runtime (matches checked-in *_pb2.py gencode 6.31.x)
 
 ############################
 # Observability (lightweight now)
@@ -69,7 +69,9 @@ isort~=5.13.0               # Import sorting (profile=black)
 ruff~=0.6.0                 # Fast linting (can later supersede flake8/isort checks)
 mypy~=1.10.0                # Static typing (Phase B tighten: --strict)
 types-orjson==3.6.2 # Stub package for orjson (improves mypy experience)
-pyinstrument~=4.6.0         # Lightweight sampling profiler (used by perf harness)
+# pyinstrument~=4.6.0       # OPTIONAL: sampling profiler, only used by perf harness (backend/tests/perf),
+                            # which falls back to cProfile if missing. No cp313 wheel as of 4.6.x —
+                            # install manually on Python <= 3.12 if profiling HTML reports are wanted.
 
 ###################################################################################################
 # Notes

@@ -41,6 +41,30 @@ npm run dev
 
 Application runs at `http://localhost:3000`.
 
+## Recovered Stack Quick Start
+
+For the stabilized recovered FastAPI/Vue UNOC stack, use the verified guide in [docs/local_start.md](docs/local_start.md). Recovery status and known test drift are tracked in [RECOVERY_STATUS.md](RECOVERY_STATUS.md).
+
+Start the recovered stack in this order:
+
+1. `./scripts/start-postgres.ps1`
+2. `./scripts/start-engine.ps1`
+3. `./scripts/start-backend.ps1`
+4. `./scripts/start-frontend.ps1`
+
+Recovered stack ports:
+
+| Service | Port |
+| --- | --- |
+| Frontend | `http://127.0.0.1:5173` |
+| Backend | `5001` |
+| Traffic Engine | `8080` |
+| PostgreSQL | `5432` |
+
+The Go Traffic Engine on `:8080` is required for this recovered stack. The backend expects it to be available during startup. `UNOC_DEV_FEATURES=1` enables the Debug Viewer and development debug endpoints, and `UNOC_DISABLE_RELOAD=1` avoids reload noise during local recovery/dev runs. The `unoc` / `unocpw` database values in `.env.example` are Docker Compose development defaults only.
+
+VLAN is intentionally out of scope for this stabilization and remains future work.
+
 ## Verification
 
 ```bash

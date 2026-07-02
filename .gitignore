@@ -1,10 +1,51 @@
+# Dependencies and build outputs
 node_modules/
+node_modules.winbak_20260307/
 build/
 dist/
 coverage/
-.DS_Store
-*.log
-.env*
+htmlcov/
+
+# Local environment overrides
+.env
+.env.*
 !.env.example
 
-node_modules.winbak_20260307/
+# Python caches and virtual environments
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+.venv-audit/
+venv/
+
+# Logs and coverage/debug outputs
+*.log
+*.out
+*.stats
+.coverage
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+
+# Binary artifacts
+*.exe
+
+# Local database artifacts
+*.db
+*.sqlite
+*.sqlite3
+empty*.db
+unoc_dev.db
+prisma/*.db
+prisma/*.db*
+*.bak_*
+*.corrupt_*
+
+# Local result/report folders
+load_test_results/
+perf_reports/
+logs/
