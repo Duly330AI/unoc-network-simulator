@@ -16,6 +16,7 @@ from backend.services.layer_validation import validate_layer_isolation
 from backend.services.layered_state_model import resolve_layered_device_state
 from backend.services.optical_physics_model import resolve_optical_physics_state
 from backend.services.subscriber_model import resolve_subscriber_model
+from backend.services.truth_model import build_truth_model
 
 router = APIRouter(tags=["debug"], prefix="/debug")
 
@@ -135,3 +136,11 @@ def get_count_semantics():  # type: ignore[override]
         raise HTTPException(status_code=404, detail="Not Found")
     with get_session() as s:
         return build_count_semantics(s)
+
+
+@router.get("/truth-model")
+def get_truth_model():  # type: ignore[override]
+    if not _dev_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    with get_session() as s:
+        return build_truth_model(s)
