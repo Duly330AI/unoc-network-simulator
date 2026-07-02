@@ -195,10 +195,15 @@ class StatusClient:
 
                 request = status_pb2.HealthRequest()
                 response = self._stub.Health(request, timeout=5.0)
+                raw_status = str(getattr(response, "status", "")).strip()
+                status = raw_status.upper() if raw_status else "UNKNOWN"
+                if status in {"HEALTHY", "OK", "UP", "SERVING"}:
+                    status = "HEALTHY"
+                db_status = str(getattr(response, "db_status", "")).strip()
                 return {
-                    "status": response.status,
-                    "message": response.message,
-                    "version": response.version,
+                    "status": status,
+                    "message": f"db_status={db_status}" if db_status else None,
+                    "version": getattr(response, "version", None),
                     "backend": "go",
                 }
             except Exception as e:

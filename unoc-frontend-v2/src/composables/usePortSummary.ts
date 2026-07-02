@@ -9,7 +9,7 @@ export type InterfaceSummary = {
   capacity?: number | null
 }
 
-export function usePortSummary(deviceId: Ref<string> | string, pollMs = 2000) {
+export function usePortSummary(deviceId: Ref<string> | string, pollMs = 0) {
   const idRef: Ref<string> =
     typeof deviceId === 'string' ? (ref(deviceId) as Ref<string>) : (deviceId as Ref<string>)
   const interfaces = ref<InterfaceSummary[]>([])
