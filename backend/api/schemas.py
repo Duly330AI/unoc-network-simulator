@@ -314,6 +314,10 @@ class InterfaceSummaryOut(BaseModel):
     effective_status: str | None = None
     occupancy: int
     capacity: int | None = None
+    provisioned_onts_count: int | None = None
+    provisioned_cpes_count: int | None = None
+    max_capacity: int | None = None
+    utilization: float | None = None
 
 
 class TariffOut(BaseModel):

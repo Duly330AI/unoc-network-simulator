@@ -20,7 +20,9 @@ from backend.services.optical_path_resolver import resolve_optical_path
 from backend.services.pathfinding import PATHFINDING_STORE
 from backend.services.status_service import evaluate_device_status, evaluate_link_status
 from backend.services.subscriber_model import (
+    aon_access_port_state_for,
     aon_access_occupancy_for,
+    pon_port_state_for,
     pon_occupancy_for,
     resolve_subscriber_model,
 )
@@ -83,6 +85,8 @@ def _with_canonical_subscribers(
 ) -> list:
     pon_occ = pon_occupancy_for(model, device_id)
     aon_occ = aon_access_occupancy_for(model, device_id)
+    pon_ports = pon_port_state_for(model, device_id)
+    aon_ports = aon_access_port_state_for(model, device_id)
     patched: list = []
     for row in rows:
         if isinstance(row, dict):
@@ -90,18 +94,36 @@ def _with_canonical_subscribers(
             iface_id = str(item.get("id") or "")
             if iface_id in pon_occ:
                 item["occupancy"] = pon_occ[iface_id]
+                state = pon_ports.get(iface_id, {})
+                item["provisioned_onts_count"] = state.get("provisioned_onts_count", pon_occ[iface_id])
+                item["max_capacity"] = state.get("max_capacity", item.get("capacity"))
+                item["utilization"] = state.get("utilization")
             if iface_id in aon_occ:
                 item["port_role"] = "ACCESS"
                 item["occupancy"] = aon_occ[iface_id]
+                state = aon_ports.get(iface_id, {})
+                item["provisioned_cpes_count"] = state.get("provisioned_cpes_count", aon_occ[iface_id])
+                item["max_capacity"] = state.get("max_capacity", 1)
+                item["capacity"] = state.get("max_capacity", item.get("capacity"))
+                item["utilization"] = state.get("utilization")
             patched.append(item)
             continue
 
         iface_id = str(row.id or "")
         if iface_id in pon_occ:
             row.occupancy = pon_occ[iface_id]
+            state = pon_ports.get(iface_id, {})
+            row.provisioned_onts_count = int(state.get("provisioned_onts_count", pon_occ[iface_id]))
+            row.max_capacity = int(state.get("max_capacity", row.capacity or 0)) or None
+            row.utilization = state.get("utilization")
         if iface_id in aon_occ:
             row.port_role = PortRole.ACCESS
             row.occupancy = aon_occ[iface_id]
+            state = aon_ports.get(iface_id, {})
+            row.provisioned_cpes_count = int(state.get("provisioned_cpes_count", aon_occ[iface_id]))
+            row.max_capacity = int(state.get("max_capacity", 1))
+            row.capacity = int(state.get("max_capacity", row.capacity or 1))
+            row.utilization = state.get("utilization")
         patched.append(row)
     return patched
 

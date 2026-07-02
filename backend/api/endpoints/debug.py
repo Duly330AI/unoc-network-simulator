@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from backend.db import get_session
 from backend.models import Device
 from backend.services import status_diagnostics
+from backend.services.aggregation_audit import build_aggregation_audit
 from backend.services.debug_snapshot import gather_full_snapshot
 from backend.services.dependency_resolver import trace_l3_path_to_anchor
 from backend.services.layer_validation import validate_layer_isolation
@@ -117,3 +118,11 @@ def get_layer_leak_report():  # type: ignore[override]
         optical_state = resolve_optical_physics_state(s)
         device_state = resolve_layered_device_state(s, subscriber_model, optical_state)
         return validate_layer_isolation(device_state, subscriber_model, optical_state)
+
+
+@router.get("/aggregation-audit")
+def get_aggregation_audit():  # type: ignore[override]
+    if not _dev_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    with get_session() as s:
+        return build_aggregation_audit(s)

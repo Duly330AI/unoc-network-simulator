@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from backend.services.subscriber_model import SUBSCRIBER_SOURCE
+
 LAYERS = ("L1_PHYSICAL", "L2_DATAPLANE", "L3_NETWORK", "L4_SERVICE")
 
 L1_FORBIDDEN_L4_KEYS = {"subscriber", "subscribers", "subscriber_ids", "subscriber_domain"}
@@ -28,6 +30,7 @@ L4_FORBIDDEN_L1_KEYS = {
 }
 L2_FORBIDDEN_L3_KEYS = {"ip", "ip_address", "next_hop", "prefix", "route", "routes", "vrf"}
 L3_FORBIDDEN_L2_KEYS = {"bridge_domain", "mac", "mac_address", "mac_entries", "switching"}
+INVALID_SUBSCRIBER_SOURCE_TERMS = {"mac", "mac_address", "optical", "loss", "traffic", "flow", "bps", "ip_path"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,8 +198,32 @@ class LayerValidationEngine:
     def _validate_subscriber_model(self, subscriber_model: dict[str, Any]) -> list[LayerViolation]:
         violations: list[LayerViolation] = []
         flat = _flatten(subscriber_model, "subscriber_model")
-        for path, _value in flat:
-            if _path_has_any(path, {"mac", "mac_address"}):
+        source_paths = (
+            "subscriber_model.global",
+            "subscriber_model.mapping_decisions",
+            "subscriber_model.resolved_subscribers",
+        )
+        for path, value in flat:
+            if not path.startswith(source_paths):
+                continue
+            value_text = _key_text(value)
+            if path.endswith("source") or path.endswith("aggregation_source"):
+                if value_text and value_text.upper() != SUBSCRIBER_SOURCE:
+                    violations.append(
+                        LayerViolation(
+                            device_id=self._device_from_path(path),
+                            source_layer="UNKNOWN",
+                            target_layer="L4_SERVICE",
+                            source_field=path,
+                            target_field="subscriber_model",
+                            rule="INVALID_AGGREGATION_SOURCE",
+                            message="subscriber_count must be derived only from L4_PROVISIONING_GRAPH",
+                            severity=95,
+                        )
+                    )
+            if _path_has_any(path, {"mac", "mac_address"}) or any(
+                term in value_text for term in {"mac", "mac_address"}
+            ):
                 violations.append(
                     LayerViolation(
                         device_id=self._device_from_path(path),
@@ -209,7 +236,9 @@ class LayerValidationEngine:
                         severity=90,
                     )
                 )
-            if _path_has_any(path, L4_FORBIDDEN_L1_KEYS):
+            if _path_has_any(path, L4_FORBIDDEN_L1_KEYS) or any(
+                term in value_text for term in INVALID_SUBSCRIBER_SOURCE_TERMS
+            ):
                 violations.append(
                     LayerViolation(
                         device_id=self._device_from_path(path),
