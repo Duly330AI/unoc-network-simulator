@@ -21,6 +21,7 @@ from backend.models import (
     Route,
 )
 from backend.services.pathfinding import PATHFINDING_STORE
+from backend.services.event_store import append_write_path_event
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +30,14 @@ def delete_device_impl(s: Session, device_id: str) -> None:
     d = s.get(Device, device_id)
     if not d:
         raise LookupError("Not found")
+    device_type = str(getattr(d.type, "value", d.type))
 
     logger.info("delete_device_impl: deleting %s", device_id)
 
     # Get all interfaces first (needed for cascade deletion)
     interfaces = s.exec(select(Interface).where(Interface.device_id == device_id)).all()
     iface_ids = [i.id for i in interfaces]
+    deleted_link_ids: set[str] = set()
     logger.info("delete_device_impl: found %d interfaces", len(iface_ids))
 
     # Delete interface-related entities FIRST (before BridgeDomain!)
@@ -50,8 +53,10 @@ def delete_device_impl(s: Session, device_id: str) -> None:
         for ifid in iface_ids:
             logger.info("delete_device_impl: cleaning interface %s", ifid)
             for link in s.exec(select(Link).where(Link.a_interface_id == ifid)):
+                deleted_link_ids.add(link.id)
                 s.delete(link)
             for link in s.exec(select(Link).where(Link.b_interface_id == ifid)):
+                deleted_link_ids.add(link.id)
                 s.delete(link)
             for ia in s.exec(select(InterfaceAddress).where(InterfaceAddress.interface_id == ifid)):
                 s.delete(ia)
@@ -85,6 +90,14 @@ def delete_device_impl(s: Session, device_id: str) -> None:
     s.commit()
     logger.info("delete_device_impl: device %s deleted", device_id)
     PATHFINDING_STORE.bump_version()
+    append_write_path_event(
+        s,
+        "DEVICE_DELETED",
+        device_id,
+        {"device_type": device_type, "interface_count": len(iface_ids)},
+    )
+    for link_id in sorted(deleted_link_ids):
+        append_write_path_event(s, "LINK_DELETED", link_id, {"deleted_by_device_id": device_id})
 
     # NOTE: PON occupancy cache automatically invalidates via provisioning_count in cache key
     # No manual invalidation needed - cache reacts to ONT provision state changes

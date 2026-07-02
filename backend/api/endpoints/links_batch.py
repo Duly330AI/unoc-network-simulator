@@ -39,6 +39,7 @@ from backend.errors import ErrorCode, raise_error
 from backend.link_rules import allowed_media_codes_for_class
 from backend.models import Device, Link, LinkType, PhysicalMedium
 from backend.services import recompute_coalescer as coalescer
+from backend.services.event_store import append_write_path_event
 from backend.services.link_policy_optical import (
     enforce_ont_placement_rules,
     enforce_pon_role_if_declared,
@@ -171,6 +172,18 @@ def batch_create_links(payload: BatchLinkCreateRequest) -> BatchLinkCreateRespon
             # Commit all links at once
             if created_links:
                 s.commit()
+                for created in created_links:
+                    append_write_path_event(
+                        s,
+                        "LINK_CREATED",
+                        created.id,
+                        {
+                            "a_interface_id": created.a_interface_id,
+                            "b_interface_id": created.b_interface_id,
+                            "kind": str(created.kind),
+                            "rule_id": created.rule_id,
+                        },
+                    )
                 log.info("Batch committed: %d links created", len(created_links))
 
                 # Phase 3: Single recompute for all links (MAJOR SPEEDUP)

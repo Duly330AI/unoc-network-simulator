@@ -11,6 +11,7 @@ from backend.clients.go_services.optical_client import get_optical_client
 from backend.clients.go_services.status_client import get_status_client
 from backend.db import get_session, init_db
 from backend.models import Device, Interface, Link
+from backend.services.event_store import append_write_path_event
 from backend.services.pathfinding import PATHFINDING_STORE
 from backend.services.status_service import evaluate_device_status
 
@@ -33,6 +34,15 @@ def delete_link_impl(link_id: str) -> None:
                 baseline[dev.id] = evaluate_device_status(dev)
         s.delete(link)
         s.commit()
+        append_write_path_event(
+            s,
+            "LINK_DELETED",
+            link_id,
+            {
+                "a_interface_id": a_iface.id if a_iface else None,
+                "b_interface_id": b_iface.id if b_iface else None,
+            },
+        )
         tv = PATHFINDING_STORE.bump_version()
 
         events.publish(events.Event(type="link.deleted", payload={"id": link_id}, topo_version=tv))

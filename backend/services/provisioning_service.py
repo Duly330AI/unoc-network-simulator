@@ -24,6 +24,7 @@ from backend.models import (
     ProvisioningAction,
     ProvisioningRecord,
 )
+from backend.services.event_store import append_write_path_event
 from backend.services.mac_allocator import next_mac
 from backend.services.provisioning_dependency import dependency_ok as _dependency_ok_impl
 from backend.services.provisioning_dependency import is_provisionable as _is_provisionable_impl
@@ -342,6 +343,12 @@ def provision_device(session: Session, device: Device) -> Device:
     except Exception:
         session.rollback()
         raise
+    append_write_path_event(
+        session,
+        "PROVISIONING_UPDATED",
+        device.id,
+        {"device_type": device.type.value, "provisioned": True, "ip": ip_addr},
+    )
     # Emit provisioned event once from service layer so both direct and API paths see it
     try:
         from backend.services.pathfinding import PATHFINDING_STORE as _pf

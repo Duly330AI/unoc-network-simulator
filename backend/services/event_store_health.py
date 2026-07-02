@@ -36,6 +36,8 @@ def _records_to_simulation_events(records: list[EventStoreRecord]) -> list[Simul
     events: list[SimulationEvent] = []
     sequence = 0
     for record in records:
+        if record.source != BACKFILL_SOURCE:
+            continue
         if record.event_type not in SIMULATION_EVENT_TYPES:
             continue
         events.append(
@@ -59,6 +61,7 @@ def build_event_store_health(session: Session) -> dict[str, Any]:
     backfill_count = sum(1 for record in records if record.source == BACKFILL_SOURCE)
     projection_lag = len(replayable_events) - int(projections.get("event_count") or 0)
     legacy_runtime_events = [record for record in records if record.source == "RUNTIME_EVENT_BUS"]
+    write_path_events = [record for record in records if record.source == "WRITE_PATH"]
     consistency = "ok"
     if projection_lag != 0:
         consistency = "projection_lag"
@@ -90,6 +93,7 @@ def build_event_store_health(session: Session) -> dict[str, Any]:
             "aon_subscribers": projections.get("analytics_projection", {}).get("aon_subscribers", {}),
         },
         "legacy_runtime_events_recorded": len(legacy_runtime_events),
+        "write_path_events_recorded": len(write_path_events),
         "hard_rule_status": (
             "enforced" if event_store_enforcement_enabled() else "available_but_not_enabled"
         ),

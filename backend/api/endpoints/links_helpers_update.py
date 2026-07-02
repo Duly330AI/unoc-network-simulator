@@ -12,6 +12,7 @@ from backend.db import get_session, init_db
 from backend.errors import ErrorCode, raise_error
 from backend.link_rules import allowed_media_codes_for_class
 from backend.models import Device, Interface, Link, PhysicalMedium, Status
+from backend.services.event_store import append_write_path_event
 from backend.services.links_service import classify_devices_for_link
 from backend.services.pathfinding import PATHFINDING_STORE
 from backend.services.status_service import evaluate_device_status, evaluate_link_status
@@ -73,6 +74,12 @@ def update_link_impl(link_id: str, payload: LinkUpdate) -> LinkResolvedOut:
             setattr(link, k, v)
         s.add(link)
         s.commit()
+        append_write_path_event(
+            s,
+            "LINK_UPDATED",
+            link.id,
+            {"changed_fields": sorted(data.keys())},
+        )
         tv = PATHFINDING_STORE.bump_version()
         s.refresh(link)
 

@@ -12,7 +12,9 @@ from backend.models import EventStoreRecord
 DOMAIN_EVENT_TYPES = {
     "DEVICE_CREATED",
     "DEVICE_CONNECTED",
+    "DEVICE_DELETED",
     "DEVICE_LINKED",
+    "DEVICE_UPDATED",
     "PORT_CONNECTED",
     "CPE_PROVISIONED",
     "ONT_ASSIGNED",
@@ -21,6 +23,7 @@ DOMAIN_EVENT_TYPES = {
     "LINK_CREATED",
     "LINK_DELETED",
     "LINK_UPDATED",
+    "PROVISIONING_UPDATED",
     "RUNTIME_EVENT",
 }
 
@@ -75,6 +78,24 @@ def append_runtime_event(event: Any) -> None:
         return None
 
 
+def append_write_path_event(
+    session: Session,
+    event_type: str,
+    entity_id: str,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    data = dict(payload or {})
+    data.setdefault("entity_id", entity_id)
+    data.setdefault("timestamp", datetime.now(UTC).isoformat())
+    try:
+        append_event(session, event_type, data, source="WRITE_PATH")
+    except Exception:
+        try:
+            session.rollback()
+        except Exception:
+            pass
+
+
 def event_store_snapshot(session: Session) -> dict[str, Any]:
     rows = session.exec(select(EventStoreRecord).order_by(EventStoreRecord.sequence)).all()
     return {
@@ -85,4 +106,10 @@ def event_store_snapshot(session: Session) -> dict[str, Any]:
     }
 
 
-__all__ = ["DOMAIN_EVENT_TYPES", "append_event", "append_runtime_event", "event_store_snapshot"]
+__all__ = [
+    "DOMAIN_EVENT_TYPES",
+    "append_event",
+    "append_runtime_event",
+    "append_write_path_event",
+    "event_store_snapshot",
+]

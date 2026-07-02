@@ -8,6 +8,7 @@ from sqlmodel import select
 from backend.db import get_session, init_db
 from backend.models import Device, Interface, InterfaceAddress, InterfaceRole, PortRole, Prefix
 from backend.services import recompute_coalescer
+from backend.services.event_store import append_write_path_event
 from backend.services.mac_allocator import next_mac
 from backend.services.pathfinding import PATHFINDING_STORE
 
@@ -82,6 +83,12 @@ def create_interface(device_id: str, payload: dict):
             s.rollback()
             raise HTTPException(status_code=409, detail="INTERFACE_CONFLICT") from exc
         s.refresh(i)
+        append_write_path_event(
+            s,
+            "PORT_CONNECTED",
+            i.id,
+            {"device_id": i.device_id, "name": i.name, "port_role": str(i.port_role) if i.port_role else None},
+        )
         return {
             "id": i.id,
             "device_id": i.device_id,
@@ -212,6 +219,12 @@ def create_interface_address(interface_id: str, payload: dict):
             s.rollback()
             raise HTTPException(status_code=409, detail="DUPLICATE_IP") from exc
         s.refresh(a)
+        append_write_path_event(
+            s,
+            "PROVISIONING_UPDATED",
+            interface_id,
+            {"address_id": a.id, "ip": a.ip, "prefix_len": a.prefix_len},
+        )
         # IP address mutations can influence reachability; bump and schedule recompute
         PATHFINDING_STORE.bump_version()
         recompute_coalescer.schedule(scope="addresses", key=interface_id)
@@ -236,6 +249,12 @@ def delete_interface_address(interface_id: str, address_id: int):
             raise HTTPException(status_code=404, detail="Address not found")
         s.delete(a)
         s.commit()
+        append_write_path_event(
+            s,
+            "PROVISIONING_UPDATED",
+            interface_id,
+            {"address_id": address_id, "action": "address_deleted"},
+        )
         # Invalidate on address removal as well
         PATHFINDING_STORE.bump_version()
         recompute_coalescer.schedule(scope="addresses", key=interface_id)

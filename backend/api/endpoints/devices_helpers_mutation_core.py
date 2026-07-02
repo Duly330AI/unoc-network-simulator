@@ -25,6 +25,7 @@ from backend.models import (
     Tariff,
 )
 from backend.services.mac_allocator import next_mac
+from backend.services.event_store import append_write_path_event
 from backend.services.pathfinding import PATHFINDING_STORE
 from backend.services.seed_service import allocate_backbone_mgmt, ensure_default_tariffs
 from backend.services.splitter_service import DEFAULT_SPLIT_RATIO, ensure_default_ports_for_splitter
@@ -255,6 +256,20 @@ def create_device_impl(s: Session, payload: DeviceCreate) -> DeviceOut:
     # NOTE: PON occupancy cache automatically invalidates via provisioning_count in cache key
     # No manual invalidation needed - cache reacts to ONT provision state changes
 
+    append_write_path_event(
+        s,
+        "DEVICE_CREATED",
+        d.id,
+        {"device_type": d.type.value, "name": d.name, "status": str(d.status)},
+    )
+    for iface in s.exec(select(Interface).where(Interface.device_id == d.id)).all():
+        append_write_path_event(
+            s,
+            "PORT_CONNECTED",
+            iface.id,
+            {"device_id": iface.device_id, "name": iface.name},
+        )
+
     return DeviceOut.from_model(d)
 
 
@@ -263,6 +278,9 @@ def update_device_impl(s: Session, device_id: str, payload: DeviceUpdate) -> Dev
     if not d:
         raise LookupError("Not found")
     data = payload.model_dump(exclude_unset=True)
+    before_iface_ids = {
+        iface.id for iface in s.exec(select(Interface).where(Interface.device_id == device_id)).all()
+    }
 
     # validate hardware_model compatibility
     if "hardware_model_id" in data:
@@ -429,5 +447,20 @@ def update_device_impl(s: Session, device_id: str, payload: DeviceUpdate) -> Dev
 
     # NOTE: PON occupancy cache automatically invalidates via provisioning_count in cache key
     # No manual invalidation needed - cache reacts to ONT provision state changes
+
+    append_write_path_event(
+        s,
+        "DEVICE_UPDATED",
+        d.id,
+        {"device_type": d.type.value, "changed_fields": sorted(data.keys())},
+    )
+    for iface in s.exec(select(Interface).where(Interface.device_id == d.id)).all():
+        if iface.id not in before_iface_ids:
+            append_write_path_event(
+                s,
+                "PORT_CONNECTED",
+                iface.id,
+                {"device_id": iface.device_id, "name": iface.name},
+            )
 
     return after
