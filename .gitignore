@@ -24,6 +24,7 @@ venv/
 # Logs and coverage/debug outputs
 *.log
 *.out
+*.pid
 *.stats
 .coverage
 

@@ -121,6 +121,21 @@ Use `scripts/status-stack.ps1` to inspect the local stack before starting more
 processes. It reports the expected ports, listener PIDs, process names, command
 lines when available, work-copy matches, and read-only HTTP health checks.
 
+## Logged background start
+
+For agent-friendly local debugging, start the stack in the background with
+stdout/stderr logs and PID files under `logs/`:
+
+```powershell
+.\scripts\start-stack-logged.ps1
+```
+
+The helper starts Compose Postgres, then starts the traffic engine, backend, and
+frontend only when their expected ports are free. If a service is already
+listening, it prints the owning PID/process details instead of starting a
+duplicate. Use `scripts/status-stack.ps1` to inspect running services and
+`scripts/stop-stack.ps1` for controlled shutdown.
+
 ## Quick verification
 
 ```powershell
