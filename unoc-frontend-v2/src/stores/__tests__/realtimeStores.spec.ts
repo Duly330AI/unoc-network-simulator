@@ -54,6 +54,44 @@ describe('realtime store handlers', () => {
     expect(after.status).toBe('UP')
   })
 
+  it('maps legacy optical event fields into signal fields', async () => {
+    setActivePinia(createPinia())
+    const dev = useDevicesStore()
+    dev.devices = [
+      {
+        id: 'ont-legacy-optical',
+        name: 'ont-legacy-optical',
+        type: 'ONT' as unknown as any,
+        status: 'UP' as unknown as any,
+        effective_status: 'UP',
+        provisioned: true,
+        role: 'active',
+        admin_override_status: null,
+        signal_power_dbm: -12,
+        signal_margin_db: 10,
+        total_path_attenuation_db: 6
+      }
+    ]
+    dev.initRealtime()
+
+    eventBus.emit('device.optical.updated', {
+      type: 'device.optical.updated',
+      payload: {
+        id: 'ont-legacy-optical',
+        received_dbm: -44.5,
+        margin_db: -3.2,
+        attenuation_db: 48.5,
+        signal_status: 'NO_SIGNAL'
+      }
+    })
+
+    const after = dev.byId('ont-legacy-optical')!
+    expect(after.signal_power_dbm).toBe(-44.5)
+    expect(after.signal_margin_db).toBe(-3.2)
+    expect(after.total_path_attenuation_db).toBe(48.5)
+    expect(after.signal_status).toBe('NO_SIGNAL')
+  })
+
   it('adds/removes links on link.created/deleted', async () => {
     setActivePinia(createPinia())
     const links = useLinksStore()

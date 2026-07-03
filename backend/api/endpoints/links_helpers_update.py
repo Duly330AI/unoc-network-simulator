@@ -6,7 +6,6 @@ from fastapi import HTTPException
 
 from backend import events
 from backend.api.schemas import LinkResolvedOut, LinkUpdate
-from backend.clients.go_services.optical_client import get_optical_client
 from backend.clients.go_services.status_client import get_status_client
 from backend.db import get_session, init_db
 from backend.errors import ErrorCode, raise_error
@@ -21,6 +20,9 @@ from backend.services.status_service import evaluate_device_status, evaluate_lin
 from .links_helpers_common import normalize_status_str
 
 __all__ = ["update_link_impl"]
+
+
+_OPTICAL_RELEVANT_LINK_FIELDS = {"length_km", "physical_medium_id"}
 
 
 @projection_write
@@ -49,6 +51,11 @@ def update_link_impl(link_id: str, payload: LinkUpdate) -> LinkResolvedOut:
         for dev in (a_dev, b_dev):
             if dev:
                 baseline[dev.id] = evaluate_device_status(dev)
+
+        optical_recompute_needed = any(
+            field in data and getattr(link, field) != data[field]
+            for field in _OPTICAL_RELEVANT_LINK_FIELDS
+        )
 
         if (
             "physical_medium_id" in data
@@ -93,21 +100,13 @@ def update_link_impl(link_id: str, payload: LinkUpdate) -> LinkResolvedOut:
             pass
 
         try:
-            # Optical recompute via Go service (4,000× faster!)
-            optical_client = get_optical_client()
-            if optical_client:
-                optical_client.recompute_paths(link_ids=[link.id])
-
-            events.publish(
-                events.Event(
-                    type="device.optical.updated",
-                    payload={
-                        "affected_link_ids": [link.id],
-                        "reason": "link_updated",
-                    },
-                    topo_version=tv,
+            # Persist optical RX/status changes through the real recompute path.
+            if optical_recompute_needed:
+                from backend.services.optical_service import (
+                    recompute_optical_paths_for_affected_onts,
                 )
-            )
+
+                recompute_optical_paths_for_affected_onts(link_ids={link.id})
 
             # Status propagation via Go service (30,000× faster!)
             try:
