@@ -12,6 +12,7 @@
           <th>Name</th>
           <th>Down (Mbps)</th>
           <th>Up (Mbps)</th>
+          <th>Technology</th>
           <th></th>
         </tr>
       </thead>
@@ -20,6 +21,7 @@
           <td>{{ t.name }}</td>
           <td>{{ t.max_down_mbps }}</td>
           <td>{{ t.max_up_mbps }}</td>
+          <td :class="{ 'tech-missing': !t.technology }">{{ t.technology || '⚠ fehlt' }}</td>
           <td class="actions">
             <button class="btn sm" @click="openEdit(t)">Edit</button>
             <button class="btn sm danger" @click="confirmDelete(t)">Delete</button>
@@ -64,7 +66,7 @@ async function confirmDelete(t: Tariff){
   try{ await store.remove(t.id) } catch(e){ alert((e as Error).message) }
 }
 
-async function onSubmit(payload: { name: string; max_down_mbps: number; max_up_mbps: number }){
+async function onSubmit(payload: { name: string; max_down_mbps: number; max_up_mbps: number; technology: 'GPON'|'AON' }){
   saving.value = true
   modalError.value = null
   try{
@@ -86,5 +88,6 @@ async function onSubmit(payload: { name: string; max_down_mbps: number; max_up_m
 .tbl th,.tbl td{ border-bottom:1px solid #2d2d2d; padding:.4rem .5rem; text-align:left; }
 .actions{ display:flex; gap:.25rem; }
 .empty{ opacity:.6; font-style:italic; }
+.tech-missing{ color:#fbbf24; }
 .error{ color:#f87171; margin:.5rem 0; }
 </style>

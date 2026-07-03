@@ -40,7 +40,7 @@ export const useTariffsStore = defineStore('tariffs', {
         this.loading = false
       }
     },
-    async create(payload: Pick<Tariff, 'name' | 'max_up_mbps' | 'max_down_mbps'>) {
+    async create(payload: Pick<Tariff, 'name' | 'max_up_mbps' | 'max_down_mbps' | 'technology'>) {
       const resp = await fetch('/api/tariffs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,7 +61,7 @@ export const useTariffsStore = defineStore('tariffs', {
     },
     async update(
       id: number,
-      patch: Partial<Pick<Tariff, 'name' | 'max_up_mbps' | 'max_down_mbps'>>
+      patch: Partial<Pick<Tariff, 'name' | 'max_up_mbps' | 'max_down_mbps' | 'technology'>>
     ) {
       const resp = await fetch(`/api/tariffs/${id}`, {
         method: 'PUT',

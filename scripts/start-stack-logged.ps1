@@ -227,6 +227,7 @@ if (-not $NoBackend) {
         if (-not $env:DATABASE_URL) { $env:DATABASE_URL = $defaultDatabaseUrl }
         if (-not $env:UNOC_DEV_FEATURES) { $env:UNOC_DEV_FEATURES = '1' }
         if (-not $env:UNOC_DISABLE_RELOAD) { $env:UNOC_DISABLE_RELOAD = '1' }
+        if (-not $env:AUTO_ASSIGN_DEFAULT_HARDWARE) { $env:AUTO_ASSIGN_DEFAULT_HARDWARE = '1' }
 
         Start-LoggedProcess -Name 'FastAPI backend' `
             -Port 5001 `

@@ -94,15 +94,11 @@ def create_device_impl(s: Session, payload: DeviceCreate) -> DeviceOut:
         if hm.device_type != payload.type:
             raise UnprocessableError("HARDWARE_TYPE_MISMATCH")
     else:
-        # Optional: auto-assign default hardware model by type when enabled
-        from os import getenv
+        # Optional: auto-assign default hardware model by type when enabled.
+        # Read via Settings so both process env and a root .env file work.
+        from backend.core.config import get_settings
 
-        auto_assign = getenv("AUTO_ASSIGN_DEFAULT_HARDWARE", "false").lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
+        auto_assign = get_settings().auto_assign_default_hardware
         if auto_assign:
             rows = s.exec(
                 select(HardwareModel)
