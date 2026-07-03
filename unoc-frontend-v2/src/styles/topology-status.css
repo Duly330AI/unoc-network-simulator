@@ -44,5 +44,22 @@ svg g.device-node[data-status='UNKNOWN'] .frame-outline {
   filter: drop-shadow(0 0 2px rgba(144, 202, 249, 0.35));
 }
 
+svg line.link.link-congested {
+  filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.85));
+}
+
+svg g.device-node[data-congested='1']:not([data-status='DOWN']):not([data-status='DEGRADED'])
+  .frame,
+svg g.device-node[data-congested='1']:not([data-status='DOWN']):not([data-status='DEGRADED'])
+  .frame-outline {
+  filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.85));
+}
+
+svg g.device-node[data-congested='1']:not([data-status='DOWN']):not([data-status='DEGRADED'])
+  .frame-outline {
+  stroke: #f59e0b !important;
+  stroke-width: 3;
+}
+
 /* Optional: if any cockpit omits .frame-outline we still get inner frame stroke; if both exist outline gets same color.
    Could differentiate by thicker stroke or separate glow later. */

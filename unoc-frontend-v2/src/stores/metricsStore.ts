@@ -7,6 +7,8 @@ export interface DeviceMetric {
   version: number
   upstream_bps?: number
   downstream_bps?: number
+  congested?: boolean
+  capacity_mbps?: number
 }
 
 export interface InterfaceMetric {
@@ -49,6 +51,8 @@ export const useMetricsStore = defineStore('metrics', {
             version?: number
             upstream_bps?: number
             downstream_bps?: number
+            congested?: boolean
+            capacity_mbps?: number
           }>
           tick?: number
         }
@@ -64,13 +68,18 @@ export const useMetricsStore = defineStore('metrics', {
             typeof it.version === 'number' ? it.version : (cur?.version ?? 0) + 1
           if (!cur || incomingVersion > cur.version) {
             if (!next) next = { ...this.byId }
-            next[it.id] = {
+            const metric: DeviceMetric = {
               bps: it.bps,
               utilization: it.utilization,
               version: incomingVersion,
               upstream_bps: it.upstream_bps ?? cur?.upstream_bps,
               downstream_bps: it.downstream_bps ?? cur?.downstream_bps
             }
+            const congested = it.congested ?? cur?.congested
+            const capacityMbps = it.capacity_mbps ?? cur?.capacity_mbps
+            if (typeof congested === 'boolean') metric.congested = congested
+            if (typeof capacityMbps === 'number') metric.capacity_mbps = capacityMbps
+            next[it.id] = metric
           }
         }
         if (next) this.byId = next
@@ -87,6 +96,8 @@ export const useMetricsStore = defineStore('metrics', {
           version?: number
           upstream_bps?: number
           downstream_bps?: number
+          congested?: boolean
+          capacity_mbps?: number
         }
       >
       links?: Record<string, unknown>
@@ -95,13 +106,16 @@ export const useMetricsStore = defineStore('metrics', {
     }) {
       const next: Record<string, DeviceMetric> = {}
       for (const [id, m] of Object.entries(snapshot.devices || {})) {
-        next[id] = {
+        const metric: DeviceMetric = {
           bps: m.bps,
           utilization: m.utilization,
           version: typeof m.version === 'number' ? m.version : 0,
           upstream_bps: m.upstream_bps,
           downstream_bps: m.downstream_bps
         }
+        if (typeof m.congested === 'boolean') metric.congested = m.congested
+        if (typeof m.capacity_mbps === 'number') metric.capacity_mbps = m.capacity_mbps
+        next[id] = metric
       }
       this.byId = next
       this.lastTick = snapshot.lastTick ?? 0

@@ -74,12 +74,12 @@ func GenerateFlows(
 			continue
 		}
 
-		// TODO(HGO-007): Re-enable status check after topology validation
-		// For now, skip status check to validate API without full L3/L2 chain
-		// Skip if effective status is not UP
-		// if device.EffectiveStatus() != models.StatusUP {
-		// 	continue
-		// }
+		// HGO-007: DOWN leaves must not generate demand traffic now that status
+		// persistence and provisioning parent checks are reliable.
+		if device.EffectiveStatus() != models.StatusUP {
+			log.Debug().Str("device_id", device.ID).Str("effective_status", string(device.EffectiveStatus())).Msg("Skipped: leaf not UP")
+			continue
+		}
 
 		// Skip if no tariff assigned
 		if !device.TariffID.Valid {

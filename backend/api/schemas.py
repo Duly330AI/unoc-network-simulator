@@ -278,6 +278,8 @@ class DeviceMetricOut(BaseModel):
     version: int | None = 0
     upstream_bps: float | None = None
     downstream_bps: float | None = None
+    congested: bool | None = None
+    capacity_mbps: float | None = None
 
 
 class MetricsSnapshotResponse(BaseModel):

@@ -60,12 +60,13 @@ type SnapshotResponse struct {
 
 // DeviceMetrics represents traffic metrics for a device
 type DeviceMetrics struct {
-	UpBps       float64 `json:"up_bps"`
-	DownBps     float64 `json:"down_bps"`
-	UpMbps      float64 `json:"up_mbps"`
-	DownMbps    float64 `json:"down_mbps"`
-	Utilization float64 `json:"utilization"`
-	Congested   bool    `json:"congested"` // HGO-006: Congestion state
+	UpBps        float64 `json:"up_bps"`
+	DownBps      float64 `json:"down_bps"`
+	UpMbps       float64 `json:"up_mbps"`
+	DownMbps     float64 `json:"down_mbps"`
+	CapacityMbps float64 `json:"capacity_mbps"`
+	Utilization  float64 `json:"utilization"`
+	Congested    bool    `json:"congested"` // HGO-006: Congestion state
 }
 
 // LinkMetrics represents traffic metrics for a link
@@ -153,8 +154,28 @@ func (s *Server) tickHandler(c *gin.Context) {
 		return
 	}
 
+	hardwareModels, err := db.FetchAllHardwareModels(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to fetch hardware models")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to fetch hardware models: " + err.Error(),
+		})
+		return
+	}
+
+	portProfiles, err := db.FetchAllPortProfiles(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to fetch port profiles")
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to fetch port profiles: " + err.Error(),
+		})
+		return
+	}
+
 	// Build topology cache
-	cache := models.BuildTopologyCache(devices, links, interfaces, tariffs)
+	cache := models.BuildTopologyCacheWithCatalog(devices, links, interfaces, tariffs, hardwareModels, portProfiles)
 
 	// Build adjacency graph
 	adjacency := graph.BuildAdjacency(cache)
@@ -182,52 +203,24 @@ func (s *Server) tickHandler(c *gin.Context) {
 	congestionMutex.RLock()
 	for devID, metrics := range result.DeviceMetrics {
 		isCongested := congestionState.DeviceCongested[devID]
-
-		// Compute utilization for ONTs (tariff-based)
-		var utilization float64 = 0.0 // Explicit 0.0 for JSON encoding
-		device := cache.DeviceByID[devID]
-		if device != nil && (device.Type == models.DeviceTypeONT || device.Type == models.DeviceTypeBusinessONT) {
-			if device.TariffID.Valid {
-				tariff := cache.TariffByID[device.TariffID.Int64]
-				if tariff != nil {
-					capacityBps := (tariff.MaxDownMbps + tariff.MaxUpMbps) * 1_000_000
-					trafficBps := metrics.DownBps + metrics.UpBps
-					if capacityBps > 0 {
-						utilization = trafficBps / capacityBps
-					}
-				}
-			}
-		}
+		utilization := congestionState.DeviceUtilization[devID]
+		capacityMbps := congestionState.DeviceCapacityMbps[devID]
 
 		snapshot.DeviceMetrics[devID] = &DeviceMetrics{
-			UpBps:       metrics.UpBps,
-			DownBps:     metrics.DownBps,
-			UpMbps:      metrics.UpBps / 1_000_000,
-			DownMbps:    metrics.DownBps / 1_000_000,
-			Utilization: utilization,
-			Congested:   isCongested,
+			UpBps:        metrics.UpBps,
+			DownBps:      metrics.DownBps,
+			UpMbps:       metrics.UpBps / 1_000_000,
+			DownMbps:     metrics.DownBps / 1_000_000,
+			CapacityMbps: capacityMbps,
+			Utilization:  utilization,
+			Congested:    isCongested,
 		}
 	}
 
 	for linkID, metrics := range result.LinkMetrics {
 		isCongested := congestionState.LinkCongested[linkID]
-
-		// Compute utilization (traffic / capacity)
-		var utilization float64
-		var capacityMbps float64
-		link := cache.LinkByID[linkID]
-		if link != nil {
-			if link.Kind == models.LinkTypeFiber {
-				capacityMbps = 10000.0 // 10G default
-			} else {
-				capacityMbps = 1000.0 // 1G default
-			}
-			capacityBps := capacityMbps * 1_000_000
-			trafficBps := metrics.DownBps + metrics.UpBps
-			if capacityBps > 0 {
-				utilization = trafficBps / capacityBps
-			}
-		}
+		utilization := congestionState.LinkUtilization[linkID]
+		capacityMbps := congestionState.LinkCapacityMbps[linkID]
 
 		snapshot.LinkMetrics[linkID] = &LinkMetrics{
 			UpBps:        metrics.UpBps,

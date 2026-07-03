@@ -85,6 +85,24 @@ export function createRenderer(args: {
   if (typeof window !== 'undefined' && typeof requestAnimationFrame === 'function') {
     if (__rafId == null) __rafId = requestAnimationFrame(__animate)
   }
+
+  function formatMbps(value: number): string {
+    if (!Number.isFinite(value)) return '?'
+    if (value >= 1000) {
+      const gbps = value / 1000
+      return `${Number.isInteger(gbps) ? gbps.toFixed(0) : gbps.toFixed(1)} Gbps`
+    }
+    return `${Math.round(value)} Mbps`
+  }
+
+  function formatLinkCapacity(metric: { bps?: number; capacity_mbps?: number } | undefined) {
+    if (!metric || typeof metric.capacity_mbps !== 'number' || metric.capacity_mbps <= 0) {
+      return ''
+    }
+    const trafficMbps = typeof metric.bps === 'number' ? metric.bps / 1_000_000 : 0
+    return ` • ${formatMbps(trafficMbps)} / ${formatMbps(metric.capacity_mbps)}`
+  }
+
   function redraw() {
     if (!svgRef.value) return
     const layoutCache = getLayoutCache()
@@ -176,7 +194,9 @@ export function createRenderer(args: {
         const utilPct =
           m && typeof m.utilization === 'number' ? Math.round(m.utilization * 100) : null
         const utilText = utilPct === null ? '—' : `${utilPct}%`
-        const content = `${aName} ↔ ${bName} • Util ${utilText}`
+        const capacityText = formatLinkCapacity(m)
+        const congestedText = m?.congested ? ' • CONGESTED' : ''
+        const content = `${aName} ↔ ${bName} • Util ${utilText}${capacityText}${congestedText}`
         tooltip.show(content, ev.clientX, ev.clientY)
       })
       .on('mousemove', function (this: SVGLineElement, ev: MouseEvent) {
@@ -210,13 +230,15 @@ export function createRenderer(args: {
         const aDev = devs.find((x) => x.id === d.a_device_id)
         const bDev = devs.find((x) => x.id === d.b_device_id)
         const m = linkMetrics.byId[d.id]
-        const { stroke: nextColor } = decideLinkColor(aDev as any, bDev as any, m as any, {
+        const { stroke: nextColor, overloaded } = decideLinkColor(aDev as any, bDev as any, m as any, {
           linkEffectiveStatus: d.effective_status || d.status,
           linkAdminOverride: d.admin_override_status
         })
         const width = linkKind(d) === 'backbone' ? 4 : 3
         // Smooth color/width transition
         d3.select(this)
+          .classed('link-congested', overloaded)
+          .attr('data-congested', overloaded ? '1' : '0')
           .transition()
           .duration(350)
           // Use inline styles so CSS rules won't override our computed color/width

@@ -18,8 +18,20 @@ type CongestionState struct {
 	// DeviceCongested maps device_id -> is_congested
 	DeviceCongested map[string]bool
 
+	// DeviceUtilization maps device_id -> current utilization ratio.
+	DeviceUtilization map[string]float64
+
+	// DeviceCapacityMbps maps device_id -> resolved effective capacity.
+	DeviceCapacityMbps map[string]float64
+
 	// LinkCongested maps link_id -> is_congested
 	LinkCongested map[string]bool
+
+	// LinkUtilization maps link_id -> current utilization ratio.
+	LinkUtilization map[string]float64
+
+	// LinkCapacityMbps maps link_id -> resolved effective capacity.
+	LinkCapacityMbps map[string]float64
 
 	// CongestionEvents tracks transitions for this tick (for event emission)
 	CongestionEvents []CongestionEvent
@@ -37,9 +49,13 @@ type CongestionEvent struct {
 // NewCongestionState creates a new congestion state tracker
 func NewCongestionState() *CongestionState {
 	return &CongestionState{
-		DeviceCongested:  make(map[string]bool),
-		LinkCongested:    make(map[string]bool),
-		CongestionEvents: make([]CongestionEvent, 0),
+		DeviceCongested:    make(map[string]bool),
+		DeviceUtilization:  make(map[string]float64),
+		DeviceCapacityMbps: make(map[string]float64),
+		LinkCongested:      make(map[string]bool),
+		LinkUtilization:    make(map[string]float64),
+		LinkCapacityMbps:   make(map[string]float64),
+		CongestionEvents:   make([]CongestionEvent, 0),
 	}
 }
 
@@ -51,14 +67,6 @@ func DetectCongestion(
 ) *CongestionState {
 	newState := NewCongestionState()
 
-	// Copy previous state for hysteresis
-	for devID, wasCongested := range prevState.DeviceCongested {
-		newState.DeviceCongested[devID] = wasCongested
-	}
-	for linkID, wasCongested := range prevState.LinkCongested {
-		newState.LinkCongested[linkID] = wasCongested
-	}
-
 	// Check device congestion
 	for devID, metrics := range result.DeviceMetrics {
 		device := cache.DeviceByID[devID]
@@ -66,52 +74,43 @@ func DetectCongestion(
 			continue
 		}
 
-		// Compute utilization (traffic / capacity)
-		// For devices, capacity is typically sum of interface capacities or tariff max
-		var utilization float64
-		if device.Type == models.DeviceTypeONT || device.Type == models.DeviceTypeBusinessONT {
-			// For ONTs, use tariff capacity
-			if device.TariffID.Valid {
-				tariff := cache.TariffByID[device.TariffID.Int64]
-				if tariff != nil {
-					capacityBps := (tariff.MaxDownMbps + tariff.MaxUpMbps) * 1_000_000
-					trafficBps := metrics.DownBps + metrics.UpBps
-					if capacityBps > 0 {
-						utilization = trafficBps / capacityBps
-					}
-				}
-			}
-		} else {
-			// For other devices, use sum of interface capacities (if available)
-			// For now, skip non-leaf devices (TODO: aggregate interface capacity)
-			continue
-		}
+		capacityMbps := EffectiveDeviceCapacityMbps(device, cache)
+		utilization := FullDuplexUtilization(metrics.UpBps, metrics.DownBps, capacityMbps)
+		newState.DeviceCapacityMbps[devID] = capacityMbps
+		newState.DeviceUtilization[devID] = utilization
 
 		// Apply hysteresis
-		wasCongested := newState.DeviceCongested[devID]
+		wasCongested := false
+		if prevState != nil {
+			wasCongested = prevState.DeviceCongested[devID]
+		}
 		isCongested := wasCongested // default: keep previous state
 
-		// NOTE: Debug level on purpose. ONT self-utilization is demand/tariff and
-		// oscillates 0.8-1.0 with the random factor, so these transitions ping-pong
-		// every few ticks and flooded the log at Warn. Proper device capacity
-		// semantics are Batch B scope; link congestion below stays at Warn.
-		if wasCongested {
-			// Currently congested: only clear if utilization drops below LOW threshold
-			if utilization < CongestionThresholdLow {
-				isCongested = false
-				log.Debug().
-					Str("device_id", devID).
-					Float64("utilization", utilization).
-					Msg("Device congestion cleared (hysteresis)")
-			}
+		if device.IsLeaf() || capacityMbps <= 0 {
+			// B1 reports leaf utilization but does not mark ONT/BUSINESS_ONT/AON_CPE
+			// congestion until B2 shaping can distinguish requested from delivered traffic.
+			isCongested = false
 		} else {
-			// Currently normal: only trigger if utilization exceeds HIGH threshold
-			if utilization >= CongestionThresholdHigh {
-				isCongested = true
-				log.Debug().
-					Str("device_id", devID).
-					Float64("utilization", utilization).
-					Msg("Device congestion detected")
+			if wasCongested {
+				// Currently congested: clear only when utilization drops below LOW threshold.
+				if utilization < CongestionThresholdLow {
+					isCongested = false
+					log.Info().
+						Str("device_id", devID).
+						Float64("utilization", utilization).
+						Float64("capacity_mbps", capacityMbps).
+						Msg("Device congestion cleared (hysteresis)")
+				}
+			} else {
+				// Currently normal: enter congestion at the HIGH threshold.
+				if utilization >= CongestionThresholdHigh {
+					isCongested = true
+					log.Warn().
+						Str("device_id", devID).
+						Float64("utilization", utilization).
+						Float64("capacity_mbps", capacityMbps).
+						Msg("Device congestion detected")
+				}
 			}
 		}
 
@@ -135,44 +134,41 @@ func DetectCongestion(
 			continue
 		}
 
-		// Get link capacity from PhysicalMedium (if available)
-		// For now, use fixed capacity (TODO: fetch from Link model or PhysicalMedium)
-		var capacityMbps float64
-		// Typical link capacities:
-		// - Fiber: 10G (10000 Mbps)
-		// - PON: 2.5G (2500 Mbps)
-		// - Ethernet: 1G (1000 Mbps)
-		if link.Kind == models.LinkTypeFiber {
-			capacityMbps = 10000.0 // 10G default
-		} else {
-			capacityMbps = 1000.0 // 1G default
-		}
-
-		capacityBps := capacityMbps * 1_000_000
-		trafficBps := metrics.DownBps + metrics.UpBps
-		utilization := trafficBps / capacityBps
+		capacityMbps := EffectiveLinkCapacityMbps(link, cache)
+		utilization := FullDuplexUtilization(metrics.UpBps, metrics.DownBps, capacityMbps)
+		newState.LinkCapacityMbps[linkID] = capacityMbps
+		newState.LinkUtilization[linkID] = utilization
 
 		// Apply hysteresis
-		wasCongested := newState.LinkCongested[linkID]
+		wasCongested := false
+		if prevState != nil {
+			wasCongested = prevState.LinkCongested[linkID]
+		}
 		isCongested := wasCongested // default: keep previous state
 
-		if wasCongested {
-			// Currently congested: only clear if utilization drops below LOW threshold
-			if utilization < CongestionThresholdLow {
-				isCongested = false
-				log.Info().
-					Str("link_id", linkID).
-					Float64("utilization", utilization).
-					Msg("Link congestion cleared (hysteresis)")
-			}
+		if capacityMbps <= 0 {
+			isCongested = false
 		} else {
-			// Currently normal: only trigger if utilization exceeds HIGH threshold
-			if utilization >= CongestionThresholdHigh {
-				isCongested = true
-				log.Warn().
-					Str("link_id", linkID).
-					Float64("utilization", utilization).
-					Msg("Link congestion detected")
+			if wasCongested {
+				// Currently congested: clear only when utilization drops below LOW threshold.
+				if utilization < CongestionThresholdLow {
+					isCongested = false
+					log.Info().
+						Str("link_id", linkID).
+						Float64("utilization", utilization).
+						Float64("capacity_mbps", capacityMbps).
+						Msg("Link congestion cleared (hysteresis)")
+				}
+			} else {
+				// Currently normal: enter congestion at the HIGH threshold.
+				if utilization >= CongestionThresholdHigh {
+					isCongested = true
+					log.Warn().
+						Str("link_id", linkID).
+						Float64("utilization", utilization).
+						Float64("capacity_mbps", capacityMbps).
+						Msg("Link congestion detected")
+				}
 			}
 		}
 

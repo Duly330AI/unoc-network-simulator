@@ -21,6 +21,80 @@ except ImportError:
     _metrics_available = False
 
 
+def _preserve_congestion_fields(target: dict, metrics: dict) -> None:
+    if "congested" in metrics:
+        target["congested"] = bool(metrics.get("congested"))
+    if "capacity_mbps" in metrics:
+        target["capacity_mbps"] = metrics.get("capacity_mbps")
+
+
+def transform_go_snapshot_to_frontend(go_snapshot: dict) -> dict:
+    """Transform Go snapshot format to frontend-expected format."""
+    devices = {}
+    for dev_id, metrics in go_snapshot.get("device_metrics", {}).items():
+        up_mbps = metrics.get("up_mbps", 0.0)
+        down_mbps = metrics.get("down_mbps", 0.0)
+        total_bps = (up_mbps + down_mbps) * 1_000_000.0
+        entry = {
+            "bps": total_bps,
+            "upstream_bps": up_mbps * 1_000_000.0,
+            "downstream_bps": down_mbps * 1_000_000.0,
+            "utilization": metrics.get("utilization", 0.0),
+            "version": 0,
+        }
+        _preserve_congestion_fields(entry, metrics)
+        devices[dev_id] = entry
+
+    links = {}
+    for link_id, metrics in go_snapshot.get("link_metrics", {}).items():
+        traffic_mbps = metrics.get("traffic_mbps", 0.0)
+        entry = {
+            "bps": traffic_mbps * 1_000_000.0,
+            "utilization": metrics.get("utilization", 0.0),
+            "version": 0,
+        }
+        _preserve_congestion_fields(entry, metrics)
+        links[link_id] = entry
+
+    return {
+        "lastTick": go_snapshot.get("tick", 0),
+        "devices": devices,
+        "links": links,
+    }
+
+
+def build_device_metric_changes(go_snapshot: dict) -> list[dict]:
+    device_changes = []
+    for dev_id, metrics in go_snapshot.get("device_metrics", {}).items():
+        up_bps = metrics.get("up_bps", 0.0)
+        down_bps = metrics.get("down_bps", 0.0)
+        entry = {
+            "id": dev_id,
+            "bps": up_bps + down_bps,
+            "upstream_bps": up_bps,
+            "downstream_bps": down_bps,
+            "utilization": metrics.get("utilization", 0.0),
+        }
+        _preserve_congestion_fields(entry, metrics)
+        device_changes.append(entry)
+    return device_changes
+
+
+def build_link_metric_changes(go_snapshot: dict) -> list[dict]:
+    link_changes = []
+    for link_id, metrics in go_snapshot.get("link_metrics", {}).items():
+        up_bps = metrics.get("up_bps", 0.0)
+        down_bps = metrics.get("down_bps", 0.0)
+        entry = {
+            "id": link_id,
+            "bps": up_bps + down_bps,
+            "utilization": metrics.get("utilization", 0.0),
+        }
+        _preserve_congestion_fields(entry, metrics)
+        link_changes.append(entry)
+    return link_changes
+
+
 class TariffTrafficRunner:
     def __init__(self) -> None:
         # Enabled by default; can be disabled via env TRAFFIC_ENABLED=false
@@ -95,33 +169,7 @@ class TariffTrafficRunner:
             "links": {"link_id": {"bps": float, "utilization": float}}
         }
         """
-        devices = {}
-        for dev_id, metrics in go_snapshot.get("device_metrics", {}).items():
-            up_mbps = metrics.get("up_mbps", 0.0)
-            down_mbps = metrics.get("down_mbps", 0.0)
-            total_bps = (up_mbps + down_mbps) * 1_000_000.0
-            devices[dev_id] = {
-                "bps": total_bps,
-                "upstream_bps": up_mbps * 1_000_000.0,
-                "downstream_bps": down_mbps * 1_000_000.0,
-                "utilization": metrics.get("utilization", 0.0),
-                "version": 0,
-            }
-
-        links = {}
-        for link_id, metrics in go_snapshot.get("link_metrics", {}).items():
-            traffic_mbps = metrics.get("traffic_mbps", 0.0)
-            links[link_id] = {
-                "bps": traffic_mbps * 1_000_000.0,
-                "utilization": metrics.get("utilization", 0.0),
-                "version": 0,
-            }
-
-        return {
-            "lastTick": go_snapshot.get("tick", 0),
-            "devices": devices,
-            "links": links,
-        }
+        return transform_go_snapshot_to_frontend(go_snapshot)
 
     def _run_loop(self) -> None:
         # Import here to avoid circular dependency
@@ -152,19 +200,7 @@ class TariffTrafficRunner:
                         tick = go_snapshot.get("tick", 0)
 
                         # Device metrics updates
-                        device_changes = []
-                        for dev_id, metrics in go_snapshot.get("device_metrics", {}).items():
-                            up_bps = metrics.get("up_bps", 0.0)
-                            down_bps = metrics.get("down_bps", 0.0)
-                            device_changes.append(
-                                {
-                                    "id": dev_id,
-                                    "bps": up_bps + down_bps,
-                                    "upstream_bps": up_bps,
-                                    "downstream_bps": down_bps,
-                                    "utilization": metrics.get("utilization", 0.0),
-                                }
-                            )
+                        device_changes = build_device_metric_changes(go_snapshot)
 
                         if device_changes:
                             publish(
@@ -175,17 +211,7 @@ class TariffTrafficRunner:
                             )
 
                         # Link metrics updates
-                        link_changes = []
-                        for link_id, metrics in go_snapshot.get("link_metrics", {}).items():
-                            up_bps = metrics.get("up_bps", 0.0)
-                            down_bps = metrics.get("down_bps", 0.0)
-                            link_changes.append(
-                                {
-                                    "id": link_id,
-                                    "bps": up_bps + down_bps,
-                                    "utilization": metrics.get("utilization", 0.0),
-                                }
-                            )
+                        link_changes = build_link_metric_changes(go_snapshot)
 
                         if link_changes:
                             publish(

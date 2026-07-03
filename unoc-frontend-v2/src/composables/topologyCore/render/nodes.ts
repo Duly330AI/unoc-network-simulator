@@ -11,6 +11,7 @@ import PassiveCockpit from '../../../components/cockpits/PassiveCockpit.vue'
 import BackboneGatewayCockpit from '../../../components/cockpits/BackboneGatewayCockpit.vue'
 import { makeDeviceClickHandler } from '../handlers.js'
 import { getContainerLayout } from '../../../config/containerLayouts.js'
+import { useMetricsStore } from '../../../stores/metricsStore.js'
 
 export function drawNodes(options: {
   nodesLayer: unknown
@@ -44,6 +45,7 @@ export function drawNodes(options: {
     tooltip,
     normalizeVisualStatus
   } = options
+  const metrics = useMetricsStore()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const nodeGroups = (nodesLayer as any)
@@ -227,6 +229,7 @@ export function drawNodes(options: {
     })
     .attr('data-container', (d: Device) => (d.type === 'POP' ? '1' : '0'))
     .attr('data-pinned', (d: Device) => (layoutCache[d.id].pinned ? '1' : '0'))
+    .attr('data-congested', (d: Device) => (metrics.byId[d.id]?.congested ? '1' : '0'))
     .attr(
       'data-status',
       (d: Device) =>

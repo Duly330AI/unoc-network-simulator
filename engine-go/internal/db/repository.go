@@ -105,3 +105,49 @@ func FetchAllTariffs(ctx context.Context) ([]models.Tariff, error) {
 	log.Debug().Int("count", len(tariffs)).Msg("Fetched tariffs from database")
 	return tariffs, nil
 }
+
+// FetchAllHardwareModels retrieves hardware catalog rows used for effective device capacity.
+func FetchAllHardwareModels(ctx context.Context) ([]models.HardwareModel, error) {
+	query := `
+		SELECT id, device_type, capacity_gbps
+		FROM hardwaremodel
+		ORDER BY id
+	`
+
+	rows, err := Pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query hardware models: %w", err)
+	}
+	defer rows.Close()
+
+	hardwareModels, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.HardwareModel])
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect hardware model rows: %w", err)
+	}
+
+	log.Debug().Int("count", len(hardwareModels)).Msg("Fetched hardware models from database")
+	return hardwareModels, nil
+}
+
+// FetchAllPortProfiles retrieves port catalog rows used for effective interface capacity.
+func FetchAllPortProfiles(ctx context.Context) ([]models.PortProfile, error) {
+	query := `
+		SELECT id, hardware_model_id, name, speed_gbps, role, port_role
+		FROM portprofile
+		ORDER BY hardware_model_id, name
+	`
+
+	rows, err := Pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query port profiles: %w", err)
+	}
+	defer rows.Close()
+
+	portProfiles, err := pgx.CollectRows(rows, pgx.RowToStructByName[models.PortProfile])
+	if err != nil {
+		return nil, fmt.Errorf("failed to collect port profile rows: %w", err)
+	}
+
+	log.Debug().Int("count", len(portProfiles)).Msg("Fetched port profiles from database")
+	return portProfiles, nil
+}

@@ -26,6 +26,37 @@ describe('metricsStore', () => {
     expect(s.lastTick).toBe(7)
   })
 
+  it('preserves congested and capacity_mbps from snapshots and partial updates', () => {
+    const s = useMetricsStore()
+    s.initRealtime()
+    s.applySnapshot({
+      devices: {
+        A: { bps: 10, utilization: 0.95, version: 1, congested: true, capacity_mbps: 1000 }
+      },
+      lastTick: 7
+    })
+    expect(s.byId.A).toEqual({
+      bps: 10,
+      utilization: 0.95,
+      version: 1,
+      congested: true,
+      capacity_mbps: 1000
+    })
+
+    eventBus.emit('deviceMetricsUpdated', {
+      type: 'deviceMetricsUpdated',
+      payload: { tick: 8, devices: [{ id: 'A', bps: 12, utilization: 0.2, version: 2 }] }
+    })
+
+    expect(s.byId.A).toEqual({
+      bps: 12,
+      utilization: 0.2,
+      version: 2,
+      congested: true,
+      capacity_mbps: 1000
+    })
+  })
+
   it('deviceMetricsUpdated applies multi-device updates with version check', () => {
     const s = useMetricsStore()
     s.initRealtime()

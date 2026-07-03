@@ -5,6 +5,8 @@ export interface LinkMetric {
   bps: number
   utilization: number
   version: number
+  congested?: boolean
+  capacity_mbps?: number
 }
 
 interface State {
@@ -33,7 +35,14 @@ export const useLinkMetricsStore = defineStore('linkMetrics', {
           console.debug('[linkMetricsStore] linkMetricsUpdated', { count: lcount, tick: tickVal })
         }
         const payload = (env?.payload || {}) as {
-          links?: Array<{ id: string; bps: number; utilization: number; version?: number }>
+          links?: Array<{
+            id: string
+            bps: number
+            utilization: number
+            version?: number
+            congested?: boolean
+            capacity_mbps?: number
+          }>
           tick?: number
         }
         const items = payload.links || []
@@ -47,7 +56,16 @@ export const useLinkMetricsStore = defineStore('linkMetrics', {
             typeof it.version === 'number' ? it.version : (cur?.version ?? 0) + 1
           if (!cur || incomingVersion > cur.version) {
             if (!next) next = { ...this.byId }
-            next[it.id] = { bps: it.bps, utilization: it.utilization, version: incomingVersion }
+            const metric: LinkMetric = {
+              bps: it.bps,
+              utilization: it.utilization,
+              version: incomingVersion
+            }
+            const congested = it.congested ?? cur?.congested
+            const capacityMbps = it.capacity_mbps ?? cur?.capacity_mbps
+            if (typeof congested === 'boolean') metric.congested = congested
+            if (typeof capacityMbps === 'number') metric.capacity_mbps = capacityMbps
+            next[it.id] = metric
           }
         }
         if (next) this.byId = next
@@ -55,14 +73,30 @@ export const useLinkMetricsStore = defineStore('linkMetrics', {
       })
     },
     applySnapshot(js: {
-      links?: Record<string, { bps: number; utilization: number; version?: number }>
+      links?: Record<
+        string,
+        {
+          bps: number
+          utilization: number
+          version?: number
+          congested?: boolean
+          capacity_mbps?: number
+        }
+      >
       lastTick?: number
     }) {
       const incoming = js?.links || {}
       const next: Record<string, LinkMetric> = {}
       for (const [id, m] of Object.entries(incoming)) {
         if (!id || !m) continue
-        next[id] = { bps: m.bps, utilization: m.utilization, version: m.version ?? 0 }
+        const metric: LinkMetric = {
+          bps: m.bps,
+          utilization: m.utilization,
+          version: m.version ?? 0
+        }
+        if (typeof m.congested === 'boolean') metric.congested = m.congested
+        if (typeof m.capacity_mbps === 'number') metric.capacity_mbps = m.capacity_mbps
+        next[id] = metric
       }
       this.byId = next
       if (typeof js?.lastTick === 'number') this.lastTick = js.lastTick

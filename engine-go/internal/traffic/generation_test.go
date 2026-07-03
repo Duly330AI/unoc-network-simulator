@@ -368,6 +368,48 @@ func TestGenerateFlows_SkipUnprovisioned(t *testing.T) {
 	assert.Len(t, result.LinkMetrics, 0, "should have no link metrics")
 }
 
+// TestGenerateFlows_SkipDownLeaf tests HGO-007: DOWN provisioned leaves generate no traffic.
+func TestGenerateFlows_SkipDownLeaf(t *testing.T) {
+	devices := []models.Device{
+		{
+			ID:          "core1",
+			Type:        models.DeviceTypeCoreRouter,
+			Status:      "UP",
+			Provisioned: true,
+		},
+		{
+			ID:          "olt1",
+			Type:        models.DeviceTypeOLT,
+			Status:      "UP",
+			Provisioned: true,
+		},
+		{
+			ID:          "ont1",
+			Type:        models.DeviceTypeBusinessONT,
+			Status:      "DOWN",
+			Provisioned: true,
+			TariffID:    sql.NullInt64{Int64: 1, Valid: true},
+		},
+	}
+
+	links := []models.Link{
+		{ID: "link1", AInterfaceID: "ont1-eth0", BInterfaceID: "olt1-eth0", Status: "UP"},
+		{ID: "link2", AInterfaceID: "olt1-eth1", BInterfaceID: "core1-eth0", Status: "UP"},
+	}
+	tariffs := []models.Tariff{
+		{ID: 1, MaxUpMbps: 100.0, MaxDownMbps: 500.0},
+	}
+
+	cache := buildTestCacheWithTariffs(devices, links, tariffs)
+	adj := buildTestAdjacency(cache, links)
+
+	result := GenerateFlows(cache, adj, 1, 42)
+
+	assert.Equal(t, 0, result.LeavesCount, "DOWN leaf should not be processed")
+	assert.Len(t, result.DeviceMetrics, 0, "DOWN leaf should emit no device metrics")
+	assert.Len(t, result.LinkMetrics, 0, "DOWN leaf should emit no link metrics")
+}
+
 // TestGenerateFlows_SkipNoTariff tests that devices without tariff are skipped
 func TestGenerateFlows_SkipNoTariff(t *testing.T) {
 	// Arrange: ONT without tariff

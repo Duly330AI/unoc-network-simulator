@@ -51,6 +51,24 @@ describe('linkColor helper', () => {
     expect(r.stroke).toBe(UTIL_OVERLOAD_COLOR)
     expect(r.overloaded).toBe(true)
   })
+
+  it('uses overload color for congested links even below 100% utilization', () => {
+    const a = { status: 'UP', provisioned: true }
+    const b = { status: 'UP', provisioned: true }
+    const r = decideLinkColor(a, b, { utilization: 0.42, congested: true })
+    expect(r.stroke).toBe(UTIL_OVERLOAD_COLOR)
+    expect(r.overloaded).toBe(true)
+  })
+
+  it('keeps DOWN precedence over congested links', () => {
+    const a = { status: 'UP', provisioned: true }
+    const b = { status: 'UP', provisioned: true }
+    const r = decideLinkColor(a, b, { utilization: 0.42, congested: true }, {
+      linkEffectiveStatus: 'DOWN'
+    })
+    expect(r.stroke).toBe(STATUS_COLORS.DOWN)
+    expect(r.overloaded).toBe(false)
+  })
 })
 
 describe('computeDashForLength', () => {

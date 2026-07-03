@@ -8,6 +8,7 @@ export type DeviceLite = {
 
 export type LinkMetricLite = {
   utilization?: number | null
+  congested?: boolean | null
 }
 
 function isDown(d?: DeviceLite | null): boolean {
@@ -37,6 +38,9 @@ export function decideLinkColor(
   // Endpoint administrative DOWN still forces link down (defensive — should already be captured by effective_status)
   if (isDown(aDev) || isDown(bDev)) {
     return { stroke: STATUS_COLORS.DOWN, overloaded: false }
+  }
+  if (metric?.congested === true) {
+    return { stroke: UTIL_OVERLOAD_COLOR, overloaded: true }
   }
   const hasMetric = typeof metric?.utilization === 'number' && Number.isFinite(metric!.utilization!)
   if (!hasMetric && isUnprovisioned(aDev) && isUnprovisioned(bDev)) {

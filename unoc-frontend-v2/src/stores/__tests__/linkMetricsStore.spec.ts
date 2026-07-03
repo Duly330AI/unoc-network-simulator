@@ -65,4 +65,41 @@ describe('linkMetricsStore', () => {
     expect(s.byId.l1).toEqual({ bps: 50_000_000, utilization: 0.05, version: 0 })
     expect(s.byId.l2).toEqual({ bps: 80_000_000, utilization: 0.08, version: 3 })
   })
+
+  it('preserves congested and capacity_mbps from snapshots and partial updates', () => {
+    const s = useLinkMetricsStore()
+    s.initRealtime()
+    s.applySnapshot({
+      lastTick: 10,
+      links: {
+        l1: {
+          bps: 950_000_000,
+          utilization: 0.95,
+          version: 1,
+          congested: true,
+          capacity_mbps: 1000
+        }
+      }
+    })
+    expect(s.byId.l1).toEqual({
+      bps: 950_000_000,
+      utilization: 0.95,
+      version: 1,
+      congested: true,
+      capacity_mbps: 1000
+    })
+
+    eventBus.emit('linkMetricsUpdated', {
+      type: 'linkMetricsUpdated',
+      payload: { tick: 11, links: [{ id: 'l1', bps: 100_000_000, utilization: 0.1, version: 2 }] }
+    })
+
+    expect(s.byId.l1).toEqual({
+      bps: 100_000_000,
+      utilization: 0.1,
+      version: 2,
+      congested: true,
+      capacity_mbps: 1000
+    })
+  })
 })
