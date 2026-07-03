@@ -12,8 +12,10 @@ REQUIRES: Status Propagation Go service (port 50053) + PostgreSQL
 
 import pytest
 
-from backend.clients.go_services.status_client import get_status_client
+from backend.clients.go_services.status_client import StatusClient, get_status_client
+from backend.db import get_session, init_db, reset_db
 from backend.models import Device, DeviceType, Interface, Link, Status
+from backend.services.event_store_runtime import projection_write_context
 from backend.services.status_service import bulk_update_device_statuses, detect_causal_chain_python
 
 pytestmark = pytest.mark.integration  # Mark entire module as integration test
@@ -26,6 +28,14 @@ def status_client():
     yield client
     if client:
         client.close()
+
+
+@pytest.fixture
+def session():
+    reset_db()
+    init_db()
+    with projection_write_context(), get_session() as s:
+        yield s
 
 
 @pytest.fixture
@@ -296,3 +306,54 @@ def test_propagate_status_empty_changes(status_client):
 
     assert "affected_devices" in result
     assert len(result["affected_devices"]) == 0
+
+
+@pytest.mark.parametrize(
+    ("update_database", "expected_calls"),
+    [
+        (True, [["go-ont-1", "go-switch-1"]]),
+        (False, []),
+    ],
+)
+def test_go_propagation_uses_python_writer_for_persistence(
+    monkeypatch, update_database, expected_calls
+):
+    """Go propagation returns affected IDs; Python owns DB persistence."""
+    from backend.proto import status_pb2
+    from backend.services import status_service
+
+    calls: list[list[str]] = []
+
+    def fake_bulk_update_device_statuses(device_ids: list[str]) -> None:
+        calls.append(list(device_ids))
+
+    class FakeStatusStub:
+        def PropagateStatus(self, request, timeout):  # noqa: N802
+            assert list(request.changed_device_ids) == ["go-core-1"]
+            assert list(request.changed_link_ids) == ["go-link-1"]
+            assert timeout == 30.0
+            return status_pb2.PropagateResponse(
+                device_ids=["go-ont-1", "go-switch-1"],
+                duration_ms=4,
+                status="success",
+            )
+
+    monkeypatch.setattr(
+        status_service,
+        "bulk_update_device_statuses",
+        fake_bulk_update_device_statuses,
+    )
+
+    client = StatusClient.__new__(StatusClient)
+    client._stub = FakeStatusStub()
+    client.timeout = 30.0
+
+    result = client._propagate_go(
+        changed_device_ids=["go-core-1"],
+        changed_link_ids=["go-link-1"],
+        update_database=update_database,
+    )
+
+    assert result["affected_devices"] == ["go-ont-1", "go-switch-1"]
+    assert result["source"] == "go"
+    assert calls == expected_calls

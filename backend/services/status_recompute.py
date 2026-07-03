@@ -353,6 +353,13 @@ def recompute_devices_status(
                 topo_version=topo_version,
             )
             events.publish(evt)
+    if transitions:
+        from backend.services.status_service import bulk_update_device_statuses
+
+        bulk_update_device_statuses(
+            [device_id for device_id, _before, _after in transitions]
+        )
+        session.expire_all()
     # Phase timing: db_update (approximate: includes status evaluation and event publication)
     try:
         from backend.api.endpoints.metrics import STATUS_RECOMPUTE_PHASE_DURATION as _PH

@@ -126,8 +126,7 @@ class StatusClient:
         """Call Go service for status propagation."""
         from backend.proto import status_pb2
 
-        # Note: GO service doesn't have update_database field in protobuf
-        # It always updates DB internally. Python fallback handles the flag.
+        # The Go service detects the causal chain only; Python remains the DB writer.
         request = status_pb2.PropagateRequest(
             changed_device_ids=changed_device_ids,
             changed_link_ids=changed_link_ids,
@@ -135,11 +134,18 @@ class StatusClient:
         )
 
         response = self._stub.PropagateStatus(request, timeout=self.timeout)
+        affected_devices = (
+            list(response.device_ids) if hasattr(response, "device_ids") else []
+        )
+        response_status = str(getattr(response, "status", "") or "").lower()
+
+        if update_database and affected_devices and response_status != "error":
+            from backend.services.status_service import bulk_update_device_statuses
+
+            bulk_update_device_statuses(affected_devices)
 
         return {
-            "affected_devices": (
-                list(response.device_ids) if hasattr(response, "device_ids") else []
-            ),
+            "affected_devices": affected_devices,
             "affected_links": [],  # GO service doesn't return link IDs yet
             "dependency_paths": {},  # GO service doesn't return paths yet
             "duration_ms": response.duration_ms,

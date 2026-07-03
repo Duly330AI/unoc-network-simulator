@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from backend.db import get_session, init_db, reset_db
 from backend.main import app
 from backend.models import Device, DeviceType, Interface, Link, LinkType, Status
+from backend.services.event_store_runtime import projection_write_context
 from backend.services.provisioning_service import provision_device
 from backend.services.status_recompute import recompute_devices_status
 
@@ -37,7 +38,7 @@ def test_failure_recovery_snapshot_and_api(monkeypatch):
     # Enable dev features for snapshot and propagation for status
     monkeypatch.setenv("UNOC_DEV_FEATURES", "1")
 
-    with get_session() as s:
+    with projection_write_context(), get_session() as s:
         bb = _dev("bb1", DeviceType.BACKBONE_GATEWAY)
         core = _dev("core1x", DeviceType.CORE_ROUTER)
         edge = _dev("edge1x", DeviceType.EDGE_ROUTER)
@@ -68,7 +69,7 @@ def test_failure_recovery_snapshot_and_api(monkeypatch):
     assert devs["edge1x"]["effective_status"] == "UP"
 
     # Fail the backbone and recompute
-    with get_session() as s:
+    with projection_write_context(), get_session() as s:
         bb = s.get(Device, "bb1")
         assert bb is not None
         bb.admin_override_status = Status.DOWN
@@ -85,7 +86,7 @@ def test_failure_recovery_snapshot_and_api(monkeypatch):
     assert devs["edge1x"]["effective_status"] == "DOWN"
 
     # Recover the backbone and recompute
-    with get_session() as s:
+    with projection_write_context(), get_session() as s:
         bb = s.get(Device, "bb1")
         assert bb is not None
         bb.admin_override_status = None
@@ -100,3 +101,29 @@ def test_failure_recovery_snapshot_and_api(monkeypatch):
     # With backbone recovered, auto L3 reachability is restored → core and edge return to UP
     assert devs["core1x"]["effective_status"] == "UP"
     assert devs["edge1x"]["effective_status"] == "UP"
+
+
+def test_recompute_devices_status_persists_transition_to_database():
+    with projection_write_context(), get_session() as s:
+        device = Device(
+            id="status_persist_ont",
+            name="status_persist_ont",
+            type=DeviceType.ONT,
+            status=Status.UP,
+            provisioned=False,
+        )
+        s.add(device)
+        s.commit()
+
+        transitions = recompute_devices_status(
+            s,
+            device_ids=[device.id],
+            baseline_status={device.id: Status.UP},
+        )
+
+    assert transitions == [("status_persist_ont", "Status.UP", "Status.DOWN")]
+
+    with get_session() as s:
+        stored = s.get(Device, "status_persist_ont")
+        assert stored is not None
+        assert stored.status == Status.DOWN
