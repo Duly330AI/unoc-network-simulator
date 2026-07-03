@@ -381,7 +381,19 @@ export const useDevicesStore = defineStore('devices', {
     },
     async provision(id: string) {
       const resp = await fetch(`/api/devices/${id}/provision`, { method: 'POST' })
-      if (!resp.ok) throw new Error(`Provision failed ${resp.status}`)
+      if (!resp.ok) {
+        let msg = `Provision failed ${resp.status}`
+        try {
+          msg = (await resp.json())?.detail || msg
+        } catch {
+          try {
+            msg = await resp.text()
+          } catch {
+            /* ignore */
+          }
+        }
+        throw new Error(msg)
+      }
       const body = await resp.json()
       const updated: DeviceOutX = body.device || body // endpoint returns { device }
       const idx = this.devices.findIndex((d: DeviceOutX) => d.id === id)

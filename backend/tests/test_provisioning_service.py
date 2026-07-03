@@ -10,9 +10,11 @@ References ARCHITECTURE.md §§3.3 (Algorithm), 3.5 (Error Codes), 4.1 (IPAM poo
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from backend.db import engine, init_db, reset_db
+from backend.main import app
 from backend.models import (
     VRF,
     Device,
@@ -55,6 +57,45 @@ def setup_function(_: object):
 
 def _dev(id_: str, t: DeviceType) -> Device:
     return Device(id=id_, name=id_, type=t)
+
+
+def _add_iface(session: Session, device: Device, name: str) -> str:
+    iface_id = f"{device.id}-{name}"
+    if session.get(Interface, iface_id) is None:
+        session.add(Interface(id=iface_id, device_id=device.id, name=name))
+    return iface_id
+
+
+def _connect(
+    session: Session,
+    a: Device,
+    b: Device,
+    a_port: str = "if0",
+    b_port: str = "if0",
+    kind: LinkType = LinkType.FIBER,
+) -> str:
+    a_if = _add_iface(session, a, a_port)
+    b_if = _add_iface(session, b, b_port)
+    link_id = "__".join(sorted([a_if, b_if]))
+    if session.get(Link, link_id) is None:
+        session.add(
+            Link(
+                id=link_id,
+                a_interface_id=a_if,
+                b_interface_id=b_if,
+                kind=kind,
+            )
+        )
+    return link_id
+
+
+def _connect_olt_to_ont(session: Session, olt: Device, ont: Device, odf_id: str) -> Device:
+    odf = _dev(odf_id, DeviceType.ODF)
+    session.add(odf)
+    session.flush()
+    _connect(session, olt, odf, "pon0", "in0")
+    _connect(session, odf, ont, "out0", "pon0")
+    return odf
 
 
 def test_single_provision_core_router_allocates_ip():
@@ -198,6 +239,144 @@ def test_parent_required_positive_case():
         s.commit()
         s.refresh(olt)
         assert olt.provisioned is True
+
+
+def test_ont_without_upstream_path_cannot_be_provisioned():
+    with Session(engine) as s:
+        ont = _dev("ont_no_path", DeviceType.ONT)
+        s.add(ont)
+        s.commit()
+        with pytest.raises(HTTPException) as e:
+            provision_device(s, ont)
+        assert e.value.status_code == 400
+        assert e.value.detail == "Cannot provision ONT: no valid provisioned OLT path found."
+        s.refresh(ont)
+        assert ont.provisioned is False
+
+
+def test_ont_path_to_unprovisioned_olt_cannot_be_provisioned():
+    with Session(engine) as s:
+        olt = _dev("olt_unprovisioned_parent", DeviceType.OLT)
+        ont = _dev("ont_waiting_for_olt", DeviceType.ONT)
+        s.add(olt)
+        s.add(ont)
+        s.flush()
+        _connect_olt_to_ont(s, olt, ont, "odf_unprovisioned_parent")
+        s.commit()
+        with pytest.raises(HTTPException) as e:
+            provision_device(s, ont)
+        assert e.value.status_code == 400
+        assert e.value.detail == "Cannot provision ONT: no valid provisioned OLT path found."
+        s.refresh(ont)
+        assert ont.provisioned is False
+
+
+def test_ont_with_valid_provisioned_olt_path_can_be_provisioned():
+    with Session(engine) as s:
+        core = _dev("core_for_ont_parent", DeviceType.CORE_ROUTER)
+        olt = _dev("olt_provisioned_parent", DeviceType.OLT)
+        ont = _dev("ont_with_parent_path", DeviceType.ONT)
+        s.add(core)
+        s.add(olt)
+        s.add(ont)
+        s.flush()
+        _connect(s, core, olt, "if0", "uplink0")
+        _connect_olt_to_ont(s, olt, ont, "odf_for_ont_parent")
+        s.commit()
+        provision_device(s, olt)
+        provision_device(s, ont)
+        s.refresh(ont)
+        assert ont.provisioned is True
+
+
+def test_business_ont_with_valid_provisioned_olt_path_can_be_provisioned():
+    with Session(engine) as s:
+        core = _dev("core_for_business_ont_parent", DeviceType.CORE_ROUTER)
+        olt = _dev("olt_business_parent", DeviceType.OLT)
+        ont = _dev("business_ont_with_parent_path", DeviceType.BUSINESS_ONT)
+        s.add(core)
+        s.add(olt)
+        s.add(ont)
+        s.flush()
+        _connect(s, core, olt, "if0", "uplink0")
+        _connect_olt_to_ont(s, olt, ont, "odf_for_business_ont")
+        s.commit()
+        provision_device(s, olt)
+        provision_device(s, ont)
+        s.refresh(ont)
+        assert ont.provisioned is True
+
+
+def test_aon_cpe_without_switch_path_cannot_be_provisioned():
+    with Session(engine) as s:
+        cpe = _dev("aon_cpe_no_path", DeviceType.AON_CPE)
+        s.add(cpe)
+        s.commit()
+        with pytest.raises(HTTPException) as e:
+            provision_device(s, cpe)
+        assert e.value.status_code == 400
+        assert (
+            e.value.detail
+            == "Cannot provision AON_CPE: upstream AON_SWITCH is missing or not provisioned."
+        )
+        s.refresh(cpe)
+        assert cpe.provisioned is False
+
+
+def test_aon_cpe_path_to_unprovisioned_switch_cannot_be_provisioned():
+    with Session(engine) as s:
+        sw = _dev("aon_unprovisioned_parent", DeviceType.AON_SWITCH)
+        cpe = _dev("aon_cpe_waiting_for_parent", DeviceType.AON_CPE)
+        s.add(sw)
+        s.add(cpe)
+        s.flush()
+        _connect(s, sw, cpe, "access0", "eth0")
+        s.commit()
+        with pytest.raises(HTTPException) as e:
+            provision_device(s, cpe)
+        assert e.value.status_code == 400
+        assert (
+            e.value.detail
+            == "Cannot provision AON_CPE: upstream AON_SWITCH is missing or not provisioned."
+        )
+        s.refresh(cpe)
+        assert cpe.provisioned is False
+
+
+def test_aon_cpe_with_valid_provisioned_switch_path_can_be_provisioned():
+    with Session(engine) as s:
+        core = _dev("core_for_aon_parent", DeviceType.CORE_ROUTER)
+        sw = _dev("aon_provisioned_parent", DeviceType.AON_SWITCH)
+        cpe = _dev("aon_cpe_with_parent_path", DeviceType.AON_CPE)
+        s.add(core)
+        s.add(sw)
+        s.add(cpe)
+        s.flush()
+        _connect(s, core, sw, "if0", "uplink0")
+        _connect(s, sw, cpe, "access0", "eth0")
+        s.commit()
+        provision_device(s, sw)
+        provision_device(s, cpe)
+        s.refresh(cpe)
+        assert cpe.provisioned is True
+
+
+def test_device_creation_allowed_when_provisioning_dependency_missing():
+    client = TestClient(app)
+    created = client.post(
+        "/api/devices",
+        json={"id": "created_unwired_ont", "name": "created_unwired_ont", "type": "ONT"},
+    )
+    assert created.status_code == 201
+
+    failed = client.post("/api/devices/created_unwired_ont/provision")
+    assert failed.status_code == 400
+    assert failed.json()["detail"] == "Cannot provision ONT: no valid provisioned OLT path found."
+
+    with Session(engine) as s:
+        stored = s.get(Device, "created_unwired_ont")
+        assert stored is not None
+        assert stored.provisioned is False
 
 
 def test_unexpected_parent_rejected():

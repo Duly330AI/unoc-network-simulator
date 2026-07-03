@@ -7,6 +7,7 @@ import logging
 import os
 from datetime import UTC, datetime
 
+from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -26,8 +27,12 @@ from backend.models import (
 )
 from backend.services.event_store import append_domain_event
 from backend.services.mac_allocator import next_mac
-from backend.services.provisioning_dependency import dependency_ok as _dependency_ok_impl
-from backend.services.provisioning_dependency import is_provisionable as _is_provisionable_impl
+from backend.services.provisioning_dependency import (
+    dependency_ok as _dependency_ok_impl,
+    has_valid_provisioned_aon_switch_path,
+    has_valid_provisioned_olt_path,
+    is_provisionable as _is_provisionable_impl,
+)
 from backend.services.provisioning_l3_auto import auto_configure_l3_uplinks
 from backend.services.seed_service import ensure_ipam_defaults
 
@@ -52,6 +57,29 @@ def _next_free_ip_in_prefix(session: Session, prefix: Prefix) -> tuple[str, int]
 
 def _dependency_ok(session: Session, device: Device) -> bool:  # shim for stability
     return _dependency_ok_impl(session, device)
+
+
+def _access_dependency_error_message(device_type: DeviceType) -> str:
+    if device_type == DeviceType.ONT:
+        return "Cannot provision ONT: no valid provisioned OLT path found."
+    if device_type == DeviceType.BUSINESS_ONT:
+        return "Cannot provision BUSINESS_ONT: no valid provisioned OLT path found."
+    return "Cannot provision AON_CPE: upstream AON_SWITCH is missing or not provisioned."
+
+
+def _enforce_access_parent_dependency(session: Session, device: Device) -> None:
+    if device.type in {DeviceType.ONT, DeviceType.BUSINESS_ONT}:
+        if not has_valid_provisioned_olt_path(session, device):
+            raise HTTPException(
+                status_code=400,
+                detail=_access_dependency_error_message(device.type),
+            )
+    elif device.type == DeviceType.AON_CPE:
+        if not has_valid_provisioned_aon_switch_path(session, device):
+            raise HTTPException(
+                status_code=400,
+                detail=_access_dependency_error_message(device.type),
+            )
 
 
 def provision_device(session: Session, device: Device) -> Device:
@@ -83,22 +111,7 @@ def provision_device(session: Session, device: Device) -> Device:
                 ErrorCode.INVALID_PROVISION_PATH,
                 detail_suffix="unexpected parent",
             )
-    # Explicit strict prerequisites (defensive layer in addition to _dependency_ok):
-    if device.type in {DeviceType.ONT, DeviceType.BUSINESS_ONT}:
-        has_olt = session.exec(select(Device).where(Device.type == DeviceType.OLT)).first()
-        if not has_olt:
-            # Deterministic suffix for strict prerequisite failure (Option C)
-            raise_error(
-                ErrorCode.INVALID_PROVISION_PATH,
-                detail_suffix="missing required upstream OLT",
-            )
-    if device.type == DeviceType.AON_CPE:
-        has_sw = session.exec(select(Device).where(Device.type == DeviceType.AON_SWITCH)).first()
-        if not has_sw:
-            raise_error(
-                ErrorCode.INVALID_PROVISION_PATH,
-                detail_suffix="missing required upstream AON_SWITCH",
-            )
+    _enforce_access_parent_dependency(session, device)
     # OLT upstream prerequisite at provisioning time:
     # Require at least a structural path to any router (CORE/EDGE/BACKBONE). Do NOT require L3 to an
     # anchor yet; tolerate routers lacking L3 (reason: routers_no_l3). Reject only when there is no
@@ -133,10 +146,9 @@ def provision_device(session: Session, device: Device) -> Device:
                 break
         if not structural_adjacent_to_router:
             raise_error(ErrorCode.INVALID_PROVISION_PATH, detail_suffix="no router adjacency")
-    # Bootstrap relaxation: allow access/optical segment provisioning without strict upstream L3
-    # at provisioning time. Enforce end-to-end dependency later via status/traffic gating.
-    # Applies to ONT/BUSINESS_ONT/AON_CPE leaves only. OLT is enforced strictly by default
-    # per PROVISION_MATRIX (requires upstream core path).
+    # Bootstrap relaxation: access leaves enforce their immediate provisioned parent path
+    # above, but still skip broader L3-anchor enforcement at provisioning time. End-to-end
+    # reachability remains a status/traffic responsibility.
     _t = device.type
     _t_name = getattr(_t, "value", str(_t))
     skip_dependency_enforcement = _t in {
