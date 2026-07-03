@@ -20,12 +20,29 @@ from backend.services.subscriber_model import resolve_subscriber_model, subscrib
 from .devices_helpers_common import resolve_vrf_name_map, serialize_interfaces_for_device
 
 # Topology-versioned in-process cache for list_devices_impl results.
-# Keyed by (topology_version, include_interfaces)
-_DEVICES_CACHE: dict[tuple[int, bool], list[DeviceOut]] = {}
+# Keyed by (topology_version, cache_epoch, include_interfaces)
+_DEVICES_CACHE: dict[tuple[int, int, bool], list[DeviceOut]] = {}
 _DEVICES_CACHE_LOCK = Lock()
+_DEVICES_CACHE_EPOCH = 0
 
-# Pre-serialized JSON cache (bytes) and ETag per (topology_version, include_interfaces)
-_DEVICES_JSON_CACHE: dict[tuple[int, bool], tuple[bytes, str]] = {}
+# Pre-serialized JSON cache (bytes) and ETag per (topology_version, cache_epoch, include_interfaces)
+_DEVICES_JSON_CACHE: dict[tuple[int, int, bool], tuple[bytes, str]] = {}
+
+
+def _devices_cache_epoch() -> int:
+    with _DEVICES_CACHE_LOCK:
+        return _DEVICES_CACHE_EPOCH
+
+
+def bump_devices_cache_epoch(reason: str | None = None) -> int:
+    """Invalidate /api/devices caches after derived device fields change."""
+    del reason  # reserved for future debug logging
+    global _DEVICES_CACHE_EPOCH
+    with _DEVICES_CACHE_LOCK:
+        _DEVICES_CACHE_EPOCH += 1
+        _DEVICES_CACHE.clear()
+        _DEVICES_JSON_CACHE.clear()
+        return _DEVICES_CACHE_EPOCH
 
 
 def _attach_subscriber_parameters(device_out: DeviceOut, model: dict, count_model: dict | None = None) -> None:
@@ -68,7 +85,8 @@ def _attach_measured_optical_loss(device_out: DeviceOut, optical_state: dict) ->
 
 def list_devices_impl(s: Session, include_interfaces: bool) -> list[DeviceOut]:
     tv = PATHFINDING_STORE.version()
-    key = (tv, bool(include_interfaces))
+    epoch = _devices_cache_epoch()
+    key = (tv, epoch, bool(include_interfaces))
     cached = _DEVICES_CACHE.get(key)
     if cached is not None:
         return cached
@@ -102,7 +120,7 @@ def list_devices_impl(s: Session, include_interfaces: bool) -> list[DeviceOut]:
 
         _DEVICES_CACHE[key] = out
         # Opportunistic cleanup to cap memory: drop entries for older topo versions
-        old_keys = [k for k in _DEVICES_CACHE.keys() if k[0] != tv]
+        old_keys = [k for k in _DEVICES_CACHE.keys() if k[0] != tv or k[1] != epoch]
         for k in old_keys:
             _DEVICES_CACHE.pop(k, None)
         return out
@@ -116,25 +134,33 @@ def _serialize_devices_to_json(devs: list[DeviceOut]) -> bytes:
     return json.dumps(arr, separators=(",", ":"), sort_keys=False).encode("utf-8")
 
 
-def _compute_etag(tv: int, include_interfaces: bool, payload: bytes) -> str:
+def _compute_etag(tv: int, epoch: int, include_interfaces: bool, payload: bytes) -> str:
     h = hashlib.sha256()
     h.update(b"tv=")
     h.update(str(tv).encode())
+    h.update(b";epoch=")
+    h.update(str(epoch).encode())
     h.update(b";if=")
     h.update(b"1" if include_interfaces else b"0")
     h.update(b";payload=")
     h.update(payload)
     # Weak ETag format is fine; include short prefix for readability
-    return 'W/"tv:%d-if:%d-%s"' % (tv, 1 if include_interfaces else 0, h.hexdigest()[:16])
+    return 'W/"tv:%d-epoch:%d-if:%d-%s"' % (
+        tv,
+        epoch,
+        1 if include_interfaces else 0,
+        h.hexdigest()[:16],
+    )
 
 
 def get_devices_json_cached(s: Session, include_interfaces: bool) -> tuple[bytes, str]:
-    """Return (json_bytes, etag) for devices list, cached by topology version.
+    """Return (json_bytes, etag) for devices list, cached by topology version and epoch.
 
     Builds from the existing object cache to avoid duplicate DB queries.
     """
     tv = PATHFINDING_STORE.version()
-    key = (tv, bool(include_interfaces))
+    epoch = _devices_cache_epoch()
+    key = (tv, epoch, bool(include_interfaces))
     cached = _DEVICES_JSON_CACHE.get(key)
     if cached is not None:
         return cached
@@ -142,12 +168,12 @@ def get_devices_json_cached(s: Session, include_interfaces: bool) -> tuple[bytes
     # Ensure objects exist (will populate _DEVICES_CACHE as needed)
     objs = list_devices_impl(s, include_interfaces)
     payload = _serialize_devices_to_json(objs)
-    etag = _compute_etag(tv, bool(include_interfaces), payload)
+    etag = _compute_etag(tv, epoch, bool(include_interfaces), payload)
     with _DEVICES_CACHE_LOCK:
         if key not in _DEVICES_JSON_CACHE:
             _DEVICES_JSON_CACHE[key] = (payload, etag)
             # Cleanup old versions to bound memory
-            old_keys = [k for k in _DEVICES_JSON_CACHE.keys() if k[0] != tv]
+            old_keys = [k for k in _DEVICES_JSON_CACHE.keys() if k[0] != tv or k[1] != epoch]
             for k in old_keys:
                 _DEVICES_JSON_CACHE.pop(k, None)
     return _DEVICES_JSON_CACHE.get(key, (payload, etag))

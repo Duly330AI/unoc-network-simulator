@@ -463,13 +463,22 @@ def bulk_update_device_statuses(device_ids: list[str]) -> None:
         devices = session.exec(select(Device).where(Device.id.in_(device_ids))).all()  # type: ignore[attr-defined]
 
         # Recompute status for each device
+        changed = False
         for device in devices:
             try:
                 new_status = evaluate_device_status(device)
                 if device.status != new_status:
                     device.status = new_status
+                    changed = True
             except Exception:
                 # Skip device on evaluation error
                 continue
 
         session.commit()
+        if changed:
+            try:
+                from backend.api.endpoints.devices_helpers_query import bump_devices_cache_epoch
+
+                bump_devices_cache_epoch("status_bulk_update")
+            except Exception:
+                pass

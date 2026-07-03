@@ -156,6 +156,9 @@ export const useDevicesStore = defineStore('devices', {
           signal_status?: DeviceOutX['signal_status']
           signal_power_dbm?: DeviceOutX['signal_power_dbm']
           signal_margin_db?: DeviceOutX['signal_margin_db']
+          received_dbm?: DeviceOutX['signal_power_dbm']
+          margin_db?: DeviceOutX['signal_margin_db']
+          attenuation_db?: number | null
           tx_power_dbm?: DeviceOutX['tx_power_dbm']
           sensitivity_min_dbm?: DeviceOutX['sensitivity_min_dbm']
           total_path_attenuation_db?: number | null
@@ -183,14 +186,21 @@ export const useDevicesStore = defineStore('devices', {
         const before = this.devices[idx]
         const after: DeviceOutX = { ...before }
         if ('signal_status' in payload) after.signal_status = payload.signal_status ?? null
-        if ('signal_power_dbm' in payload) after.signal_power_dbm = payload.signal_power_dbm ?? null
-        if ('signal_margin_db' in payload) after.signal_margin_db = payload.signal_margin_db ?? null
+        const signalPower =
+          payload.signal_power_dbm !== undefined ? payload.signal_power_dbm : payload.received_dbm
+        const signalMargin =
+          payload.signal_margin_db !== undefined ? payload.signal_margin_db : payload.margin_db
+        if (signalPower !== undefined) after.signal_power_dbm = signalPower ?? null
+        if (signalMargin !== undefined) after.signal_margin_db = signalMargin ?? null
         if ('tx_power_dbm' in payload) after.tx_power_dbm = payload.tx_power_dbm ?? null
         if ('sensitivity_min_dbm' in payload)
           after.sensitivity_min_dbm = payload.sensitivity_min_dbm ?? null
         // Store non-schema field used by UI for display only
-        if ('total_path_attenuation_db' in payload)
-          after.total_path_attenuation_db = payload.total_path_attenuation_db ?? null
+        const attenuation =
+          payload.total_path_attenuation_db !== undefined
+            ? payload.total_path_attenuation_db
+            : payload.attenuation_db
+        if (attenuation !== undefined) after.total_path_attenuation_db = attenuation ?? null
         this.devices.splice(idx, 1, after)
         if (topo != null) this._lastTopoByDevice[payload.id] = topo
       })

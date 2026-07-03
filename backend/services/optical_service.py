@@ -183,14 +183,29 @@ def recompute_optical_paths_for_affected_onts(
             for d in updated:
                 s.add(d)
             s.commit()
+            try:
+                from backend.api.endpoints.devices_helpers_query import bump_devices_cache_epoch
+
+                bump_devices_cache_epoch("optical_recompute")
+            except Exception:  # pragma: no cover
+                log.exception("Failed to invalidate devices cache after optical recompute")
             for d in updated:
+                signal_status = (
+                    getattr(d.signal_status, "value", str(d.signal_status))
+                    if d.signal_status
+                    else None
+                )
                 evt = events.Event(
                     type="device.optical.updated",
                     payload={
                         "id": d.id,
+                        "signal_power_dbm": d.signal_power_dbm,
+                        "signal_margin_db": d.signal_margin_db,
+                        "signal_status": signal_status,
                         "received_dbm": d.signal_power_dbm,
-                        "signal_status": (str(d.signal_status) if d.signal_status else None),
                         "margin_db": d.signal_margin_db,
+                        "attenuation_db": d.attenuation_db,
+                        "total_path_attenuation_db": d.attenuation_db,
                     },
                 )
                 events.publish(evt)
