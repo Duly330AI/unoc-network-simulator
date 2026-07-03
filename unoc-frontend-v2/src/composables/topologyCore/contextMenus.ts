@@ -35,13 +35,31 @@ export function showDeviceContextMenu(
   }
   const provisionableIds = multi.filter(provisionable)
   const items: any[] = []
+  const isContainer = (t: unknown) => t === 'POP' || t === 'CORE_SITE'
   items.push({
     id: 'start-link',
     label: 'Link von hier starten',
-    disabled: !dev,
+    disabled: !dev || isContainer(dev.type),
+    reason: dev && isContainer(dev.type) ? 'Container kann kein Link-Startpunkt sein' : undefined,
     action: () => {
       if (dev)
         window.dispatchEvent(new CustomEvent('unoc:startLinkFrom', { detail: { id: dev.id } }))
+    }
+  })
+  // Multi-link: use the current multi-selection as sources, then click a target
+  const multiLinkSources = multi.filter((id) => {
+    const d: any = devices.devices.find((x: any) => x.id === id)
+    return d && !isContainer(d.type)
+  })
+  items.push({
+    id: 'start-multi-link',
+    label: `Multi-Link von Auswahl (${multiLinkSources.length})`,
+    disabled: multiLinkSources.length < 2,
+    reason: multiLinkSources.length < 2 ? 'Mindestens 2 Geräte auswählen' : undefined,
+    action: () => {
+      window.dispatchEvent(
+        new CustomEvent('unoc:startMultiLink', { detail: { sources: multiLinkSources } })
+      )
     }
   })
   items.push({

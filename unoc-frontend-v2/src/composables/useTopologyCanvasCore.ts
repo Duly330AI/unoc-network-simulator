@@ -298,6 +298,41 @@ export function useTopologyCanvasCore(deps: TopologyCanvasDeps) {
           new CustomEvent('unoc:linkToolState', { detail: { active: linkTool.active } })
         )
       })
+      // Context menu: "Link von hier starten" → activate single-link mode with
+      // the clicked device preselected as start endpoint.
+      window.addEventListener('unoc:startLinkFrom', (e: Event) => {
+        const id = (e as CustomEvent<{ id?: string }>).detail?.id
+        if (!id) return
+        const dev = devices.devices.find((d: Device) => d.id === id)
+        if (!dev || dev.type === 'POP' || dev.type === 'CORE_SITE') return
+        linkTool.active = true
+        linkTool.mode = 'single'
+        linkTool.sources = []
+        linkTool.startDevice = id
+        linkTool.hoverDevice = null
+        redraw()
+        window.dispatchEvent(new CustomEvent('unoc:linkToolState', { detail: { active: true } }))
+      })
+      // Context menu: multi-link from current selection → activate multi target
+      // mode (same behavior as pressing "K" with a multi-selection).
+      window.addEventListener('unoc:startMultiLink', (e: Event) => {
+        const sources = (
+          (e as CustomEvent<{ sources?: string[] }>).detail?.sources || []
+        ).filter(Boolean)
+        if (sources.length < 2) return
+        linkTool.active = true
+        linkTool.mode = 'multi'
+        linkTool.sources = sources
+        linkTool.startDevice = null
+        linkTool.hoverDevice = null
+        try {
+          toasts.push(`Multi-Link Target Mode: ${sources.length} Quellen → Ziel klicken`, 'info')
+        } catch {
+          /* non-fatal toast */
+        }
+        redraw()
+        window.dispatchEvent(new CustomEvent('unoc:linkToolState', { detail: { active: true } }))
+      })
       emitStacks()
     })
     // Attach redraw watchers

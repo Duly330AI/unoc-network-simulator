@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { type Link } from './links/types.js'
 import { registerLinkRealtime } from './links/realtime.js'
 import { createBetweenDevices as createBetweenDevicesAction } from './links/createBetweenDevices.js'
+import { createManyToOne as createManyToOneAction } from './links/createManyToOne.js'
 // Re-export Link type so consumers can import it from this module
 export type { Link } from './links/types.js'
 
@@ -83,6 +84,9 @@ export const useLinksStore = defineStore('links', {
       opts?: { headless?: boolean }
     ) {
       return createBetweenDevicesAction(this, aDeviceId, bDeviceId, opts)
+    },
+    async createManyToOne(sourceDeviceIds: string[], targetDeviceId: string) {
+      return createManyToOneAction(this, sourceDeviceIds, targetDeviceId)
     },
     async setOverride(id: string, status: string | null) {
       const resp = await fetch(`/api/links/${id}/override`, {

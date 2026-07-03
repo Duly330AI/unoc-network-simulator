@@ -57,12 +57,20 @@ export function makeDeviceClickHandler(
       } catch {
         /* toast optional */
       }
-      // PARALLEL link creation (10-15× faster than sequential!)
-      const results = await Promise.allSettled(
-        eligible.map((sid) => linksStore.createBetweenDevices(sid, d.id, { headless: true }))
-      )
-      const ok = results.filter((r) => r.status === 'fulfilled').length
-      const fail = results.filter((r) => r.status === 'rejected').length
+      // Single batch request: one transaction + one recompute pass on the backend
+      let ok = 0
+      let fail = 0
+      try {
+        const res = await linksStore.createManyToOne(eligible, d.id)
+        ok = res?.ok ?? 0
+        fail = res?.fail ?? 0
+        if (fail && Array.isArray(res?.errors) && res.errors.length) {
+          console.warn('[multiLink] batch errors:', res.errors)
+        }
+      } catch (e) {
+        fail = eligible.length
+        console.warn('[multiLink] batch create failed', e)
+      }
       if (toastId) {
         try {
           const mgr = (devices as any).toasts

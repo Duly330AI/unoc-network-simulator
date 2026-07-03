@@ -36,8 +36,8 @@ describe('Multi-Link Creation Workflow (handlers)', () => {
       hoverDevice: null
     }
     const spyCreate = vi
-      .spyOn(links, 'createBetweenDevices')
-      .mockResolvedValue(undefined as unknown as any)
+      .spyOn(links, 'createManyToOne')
+      .mockResolvedValue({ ok: 2, fail: 0, errors: [] } as unknown as any)
 
     const handler = makeDeviceClickHandler(
       linkTool as any,
@@ -51,9 +51,8 @@ describe('Multi-Link Creation Workflow (handlers)', () => {
     const evt = { stopPropagation: () => {} } as unknown as MouseEvent
     await handler(evt, { id: 'c', type: 'CORE_ROUTER' })
 
-    expect(spyCreate).toHaveBeenCalledWith('a', 'c', expect.objectContaining({ headless: true }))
-    expect(spyCreate).toHaveBeenCalledWith('b', 'c', expect.objectContaining({ headless: true }))
-    expect(spyCreate).toHaveBeenCalledTimes(2)
+    expect(spyCreate).toHaveBeenCalledWith(['a', 'b'], 'c')
+    expect(spyCreate).toHaveBeenCalledTimes(1)
     expect(linkTool.active).toBe(false)
     expect(linkTool.mode).toBe('single')
     expect(linkTool.sources?.length).toBe(0)
@@ -73,8 +72,8 @@ describe('Multi-Link Creation Workflow (handlers)', () => {
       hoverDevice: null
     }
     const spyCreate = vi
-      .spyOn(links, 'createBetweenDevices')
-      .mockResolvedValue(undefined as unknown as any)
+      .spyOn(links, 'createManyToOne')
+      .mockResolvedValue({ ok: 0, fail: 0, errors: [] } as unknown as any)
 
     const handler = makeDeviceClickHandler(
       linkTool as any,

@@ -11,5 +11,12 @@ if (!(globalThis as any).__VUE_DEVTOOLS_GLOBAL_HOOK__) {
 }
 // Import and re-export public Pinia API (avoid deep path for typings)
 export * from 'pinia'
-// Optional: Re-export testing helpers when available
-export { createTestingPinia } from '@pinia/testing'
+// Minimal stand-in for @pinia/testing's createTestingPinia (package not installed).
+// Sufficient for suites that pass { stubActions: false } and spy manually.
+import { createPinia } from 'pinia'
+export function createTestingPinia(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _opts?: { stubActions?: boolean }
+) {
+  return createPinia()
+}
