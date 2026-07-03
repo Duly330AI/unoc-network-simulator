@@ -38,18 +38,19 @@ export const useLinkMetricsStore = defineStore('linkMetrics', {
         }
         const items = payload.links || []
         const tick = typeof payload.tick === 'number' ? payload.tick : this.lastTick
+        // One clone per event, not per item (was O(n²) per tick)
+        let next: Record<string, LinkMetric> | null = null
         for (const it of items) {
           if (!it || !it.id) continue
           const cur = this.byId[it.id]
           const incomingVersion =
             typeof it.version === 'number' ? it.version : (cur?.version ?? 0) + 1
           if (!cur || incomingVersion > cur.version) {
-            this.byId = {
-              ...this.byId,
-              [it.id]: { bps: it.bps, utilization: it.utilization, version: incomingVersion }
-            }
+            if (!next) next = { ...this.byId }
+            next[it.id] = { bps: it.bps, utilization: it.utilization, version: incomingVersion }
           }
         }
+        if (next) this.byId = next
         this.lastTick = tick
       })
     },

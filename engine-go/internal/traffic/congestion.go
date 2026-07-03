@@ -91,11 +91,15 @@ func DetectCongestion(
 		wasCongested := newState.DeviceCongested[devID]
 		isCongested := wasCongested // default: keep previous state
 
+		// NOTE: Debug level on purpose. ONT self-utilization is demand/tariff and
+		// oscillates 0.8-1.0 with the random factor, so these transitions ping-pong
+		// every few ticks and flooded the log at Warn. Proper device capacity
+		// semantics are Batch B scope; link congestion below stays at Warn.
 		if wasCongested {
 			// Currently congested: only clear if utilization drops below LOW threshold
 			if utilization < CongestionThresholdLow {
 				isCongested = false
-				log.Info().
+				log.Debug().
 					Str("device_id", devID).
 					Float64("utilization", utilization).
 					Msg("Device congestion cleared (hysteresis)")
@@ -104,7 +108,7 @@ func DetectCongestion(
 			// Currently normal: only trigger if utilization exceeds HIGH threshold
 			if utilization >= CongestionThresholdHigh {
 				isCongested = true
-				log.Warn().
+				log.Debug().
 					Str("device_id", devID).
 					Float64("utilization", utilization).
 					Msg("Device congestion detected")
@@ -199,7 +203,9 @@ func DetectCongestion(
 		}
 	}
 
-	if len(newState.CongestionEvents) > 0 || congestedDevices > 0 || congestedLinks > 0 {
+	// State CHANGES are logged above (Warn/Info); the steady-state summary would
+	// otherwise fire every tick for as long as anything stays congested.
+	if len(newState.CongestionEvents) > 0 {
 		log.Info().
 			Int("congested_devices", congestedDevices).
 			Int("congested_links", congestedLinks).

@@ -111,7 +111,7 @@ func (s *Server) tickHandler(c *gin.Context) {
 	defer cancel()
 
 	// Fetch topology from database
-	log.Info().Int("tick", tick).Msg("Starting traffic tick")
+	log.Debug().Int("tick", tick).Msg("Starting traffic tick")
 
 	devices, err := db.FetchAllDevices(ctx)
 	if err != nil {
@@ -252,7 +252,7 @@ func (s *Server) tickHandler(c *gin.Context) {
 	latestSnapshot = snapshot
 	snapshotMutex.Unlock()
 
-	log.Info().
+	log.Debug().
 		Int("tick", tick).
 		Int("leaves", result.LeavesCount).
 		Int("devices_with_traffic", len(result.DeviceMetrics)).

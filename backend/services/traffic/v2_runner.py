@@ -198,7 +198,12 @@ class TariffTrafficRunner:
                 elif self.engine:
                     self.engine.run_tick()
             except Exception:
-                pass
+                # Never kill the tick loop, but a silently swallowed error made
+                # dead ticks invisible; log at most one full traceback per minute.
+                now = time.time()
+                if now - getattr(self, "_last_tick_error_log", 0.0) >= 60.0:
+                    self._last_tick_error_log = now
+                    self._log.exception("traffic tick failed")
             t1 = time.time()
             rem = max(0.0, self.interval - (t1 - t0))
             if self._stop.wait(rem):

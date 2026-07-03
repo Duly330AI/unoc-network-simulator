@@ -93,7 +93,7 @@ func GenerateFlows(
 			continue
 		}
 
-		log.Info().
+		log.Debug().
 			Str("device_id", device.ID).
 			Int64("tariff_id", device.TariffID.Int64).
 			Float64("max_up_mbps", tariff.MaxUpMbps).
@@ -133,7 +133,7 @@ func GenerateFlows(
 		result.LeavesCount++
 	}
 
-	log.Info().
+	log.Debug().
 		Int("leaves_processed", result.LeavesCount).
 		Int("devices_with_traffic", len(result.DeviceMetrics)).
 		Int("links_with_traffic", len(result.LinkMetrics)).

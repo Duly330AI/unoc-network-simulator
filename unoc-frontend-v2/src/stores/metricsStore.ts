@@ -54,26 +54,26 @@ export const useMetricsStore = defineStore('metrics', {
         }
         const items = payload.devices || []
         const tick = typeof payload.tick === 'number' ? payload.tick : this.lastTick
-        // Apply surgical, version-checked updates
+        // Apply version-checked updates into ONE clone per event (a clone per
+        // item made this O(n²) per tick and was a real RAM/CPU hog at scale)
+        let next: Record<string, DeviceMetric> | null = null
         for (const it of items) {
           if (!it || !it.id) continue
           const cur = this.byId[it.id]
           const incomingVersion =
             typeof it.version === 'number' ? it.version : (cur?.version ?? 0) + 1
           if (!cur || incomingVersion > cur.version) {
-            // replace immutably
-            this.byId = {
-              ...this.byId,
-              [it.id]: {
-                bps: it.bps,
-                utilization: it.utilization,
-                version: incomingVersion,
-                upstream_bps: it.upstream_bps ?? cur?.upstream_bps,
-                downstream_bps: it.downstream_bps ?? cur?.downstream_bps
-              }
+            if (!next) next = { ...this.byId }
+            next[it.id] = {
+              bps: it.bps,
+              utilization: it.utilization,
+              version: incomingVersion,
+              upstream_bps: it.upstream_bps ?? cur?.upstream_bps,
+              downstream_bps: it.downstream_bps ?? cur?.downstream_bps
             }
           }
         }
+        if (next) this.byId = next
         this.lastTick = tick
       })
     },

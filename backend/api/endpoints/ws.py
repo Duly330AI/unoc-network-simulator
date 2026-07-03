@@ -46,6 +46,14 @@ def _coalesce_key(msg: dict) -> str | None:
         did = payload.get("id")
         if did:
             return f"dev:{did}:optical"
+    # Per-tick metric events fully replace the previous tick's values; when the
+    # outbox backs up (slow/background-throttled client) only the newest one
+    # matters. Without this the 1/s full-topology payloads queue unboundedly
+    # (driver of the 2026-07-03 dev-server RAM blowup).
+    if etype == "deviceMetricsUpdated":
+        return "metrics:device"
+    if etype == "linkMetricsUpdated":
+        return "metrics:link"
     # link created/deleted and others are not coalesced by default
     return None
 
@@ -84,6 +92,13 @@ class BoundedCoalescingQueue:
     def put(self, msg: dict) -> None:
         key = _coalesce_key(msg)
         with self._lock:
+            # Full-replacement snapshots (metrics): always keep only the newest
+            # message per key, independent of queue fullness.
+            if key is not None and key.startswith("metrics:"):
+                idx = self._find_index_for_key(key)
+                if idx is not None:
+                    self._dq[idx] = msg
+                    return
             if len(self._dq) < self._maxsize:
                 self._dq.append(msg)
                 return

@@ -251,6 +251,60 @@ export function useTopologyCanvasCore(deps: TopologyCanvasDeps) {
     }
   }
 
+  // Named window-event handlers so destroy() can unregister every one of them.
+  // Anonymous listeners accumulated across canvas remounts and leaked memory.
+  const onLayoutUndo = () => undoLayout()
+  const onLayoutRedo = () => redoLayout()
+  const onForceLayout = () => forceLayout()
+  const onToggleLinkTool = () => {
+    linkTool.active = !linkTool.active
+    if (!linkTool.active) {
+      linkTool.startDevice = null
+      linkTool.hoverDevice = null
+    }
+    redraw()
+    window.dispatchEvent(
+      new CustomEvent('unoc:linkToolState', { detail: { active: linkTool.active } })
+    )
+  }
+  // Context menu: "Link von hier starten" → activate single-link mode with
+  // the clicked device preselected as start endpoint.
+  const onStartLinkFrom = (e: Event) => {
+    const id = (e as CustomEvent<{ id?: string }>).detail?.id
+    if (!id) return
+    const dev = devices.devices.find((d: Device) => d.id === id)
+    if (!dev || dev.type === 'POP' || dev.type === 'CORE_SITE') return
+    linkTool.active = true
+    linkTool.mode = 'single'
+    linkTool.sources = []
+    linkTool.startDevice = id
+    linkTool.hoverDevice = null
+    redraw()
+    window.dispatchEvent(new CustomEvent('unoc:linkToolState', { detail: { active: true } }))
+  }
+  // Context menu: multi-link from current selection → activate multi target
+  // mode (same behavior as pressing "K" with a multi-selection).
+  const onStartMultiLink = (e: Event) => {
+    const sources = ((e as CustomEvent<{ sources?: string[] }>).detail?.sources || []).filter(
+      Boolean
+    )
+    if (sources.length < 2) return
+    linkTool.active = true
+    linkTool.mode = 'multi'
+    linkTool.sources = sources
+    linkTool.startDevice = null
+    linkTool.hoverDevice = null
+    try {
+      toasts.push(`Multi-Link Target Mode: ${sources.length} Quellen → Ziel klicken`, 'info')
+    } catch {
+      /* non-fatal toast */
+    }
+    redraw()
+    window.dispatchEvent(new CustomEvent('unoc:linkToolState', { detail: { active: true } }))
+  }
+
+  let detachWatchers: (() => void) | null = null
+
   function init() {
     // Store for tooltip interactions within canvas gestures
     const tooltip = useTooltipStore()
@@ -284,59 +338,16 @@ export function useTopologyCanvasCore(deps: TopologyCanvasDeps) {
       )
       prepareDrag = ctrl.prepareDrag
       window.addEventListener('keydown', keyHandler)
-      window.addEventListener('unoc:layoutUndo', () => undoLayout())
-      window.addEventListener('unoc:layoutRedo', () => redoLayout())
-      window.addEventListener('unoc:forceLayout', () => forceLayout())
-      window.addEventListener('unoc:toggleLinkTool', () => {
-        linkTool.active = !linkTool.active
-        if (!linkTool.active) {
-          linkTool.startDevice = null
-          linkTool.hoverDevice = null
-        }
-        redraw()
-        window.dispatchEvent(
-          new CustomEvent('unoc:linkToolState', { detail: { active: linkTool.active } })
-        )
-      })
-      // Context menu: "Link von hier starten" → activate single-link mode with
-      // the clicked device preselected as start endpoint.
-      window.addEventListener('unoc:startLinkFrom', (e: Event) => {
-        const id = (e as CustomEvent<{ id?: string }>).detail?.id
-        if (!id) return
-        const dev = devices.devices.find((d: Device) => d.id === id)
-        if (!dev || dev.type === 'POP' || dev.type === 'CORE_SITE') return
-        linkTool.active = true
-        linkTool.mode = 'single'
-        linkTool.sources = []
-        linkTool.startDevice = id
-        linkTool.hoverDevice = null
-        redraw()
-        window.dispatchEvent(new CustomEvent('unoc:linkToolState', { detail: { active: true } }))
-      })
-      // Context menu: multi-link from current selection → activate multi target
-      // mode (same behavior as pressing "K" with a multi-selection).
-      window.addEventListener('unoc:startMultiLink', (e: Event) => {
-        const sources = (
-          (e as CustomEvent<{ sources?: string[] }>).detail?.sources || []
-        ).filter(Boolean)
-        if (sources.length < 2) return
-        linkTool.active = true
-        linkTool.mode = 'multi'
-        linkTool.sources = sources
-        linkTool.startDevice = null
-        linkTool.hoverDevice = null
-        try {
-          toasts.push(`Multi-Link Target Mode: ${sources.length} Quellen → Ziel klicken`, 'info')
-        } catch {
-          /* non-fatal toast */
-        }
-        redraw()
-        window.dispatchEvent(new CustomEvent('unoc:linkToolState', { detail: { active: true } }))
-      })
+      window.addEventListener('unoc:layoutUndo', onLayoutUndo)
+      window.addEventListener('unoc:layoutRedo', onLayoutRedo)
+      window.addEventListener('unoc:forceLayout', onForceLayout)
+      window.addEventListener('unoc:toggleLinkTool', onToggleLinkTool)
+      window.addEventListener('unoc:startLinkFrom', onStartLinkFrom)
+      window.addEventListener('unoc:startMultiLink', onStartMultiLink)
       emitStacks()
     })
-    // Attach redraw watchers
-    attachCanvasWatchers(
+    // Attach redraw watchers (returns a disposer for destroy())
+    detachWatchers = attachCanvasWatchers(
       devices,
       linksStore,
       selection,
@@ -358,6 +369,16 @@ export function useTopologyCanvasCore(deps: TopologyCanvasDeps) {
   function destroy() {
     window.removeEventListener('keydown', keyHandler)
     window.removeEventListener('resize', onResize)
+    window.removeEventListener('unoc:layoutUndo', onLayoutUndo)
+    window.removeEventListener('unoc:layoutRedo', onLayoutRedo)
+    window.removeEventListener('unoc:forceLayout', onForceLayout)
+    window.removeEventListener('unoc:toggleLinkTool', onToggleLinkTool)
+    window.removeEventListener('unoc:startLinkFrom', onStartLinkFrom)
+    window.removeEventListener('unoc:startMultiLink', onStartMultiLink)
+    if (detachWatchers) {
+      detachWatchers()
+      detachWatchers = null
+    }
   }
 
   // Attach resize after init sets up DOM

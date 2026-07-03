@@ -26,6 +26,18 @@ func main() {
 		Str("port", cfg.Port).
 		Msg("Configuration loaded")
 
+	// Cap log volume after startup messages: per-tick logging at info/debug
+	// grew logs by hundreds of MB per day. Override via LOG_LEVEL if needed.
+	levelStr := os.Getenv("LOG_LEVEL")
+	if levelStr == "" {
+		levelStr = "warn"
+	}
+	if lvl, err := zerolog.ParseLevel(levelStr); err == nil {
+		zerolog.SetGlobalLevel(lvl)
+	} else {
+		log.Warn().Str("LOG_LEVEL", levelStr).Msg("Unknown log level, keeping default")
+	}
+
 	// Connect to PostgreSQL
 	if err := db.Connect(cfg.DatabaseURL); err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to database")
