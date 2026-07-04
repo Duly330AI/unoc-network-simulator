@@ -224,24 +224,30 @@ class TariffTrafficRunner:
                         # Device metrics updates
                         device_changes = build_device_metric_changes(go_snapshot)
 
-                        if device_changes:
-                            publish(
-                                Event(
-                                    type="deviceMetricsUpdated",
-                                    payload={"devices": device_changes, "tick": tick},
-                                )
+                        publish(
+                            Event(
+                                type="deviceMetricsUpdated",
+                                payload={
+                                    "devices": device_changes,
+                                    "tick": tick,
+                                    "authoritative": True,
+                                },
                             )
+                        )
 
                         # Link metrics updates
                         link_changes = build_link_metric_changes(go_snapshot)
 
-                        if link_changes:
-                            publish(
-                                Event(
-                                    type="linkMetricsUpdated",
-                                    payload={"links": link_changes, "tick": tick},
-                                )
+                        publish(
+                            Event(
+                                type="linkMetricsUpdated",
+                                payload={
+                                    "links": link_changes,
+                                    "tick": tick,
+                                    "authoritative": True,
+                                },
                             )
+                        )
 
                 elif self.engine:
                     self.engine.run_tick()

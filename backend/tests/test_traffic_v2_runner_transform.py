@@ -1,8 +1,42 @@
+import logging
+
+from backend.services.traffic import v2_engine
 from backend.services.traffic.v2_runner import (
+    TariffTrafficRunner,
     build_device_metric_changes,
     build_link_metric_changes,
     transform_go_snapshot_to_frontend,
 )
+
+
+class _StopAfterOneLoop:
+    def is_set(self):
+        return False
+
+    def wait(self, _timeout):
+        return True
+
+
+class _FakeGoClient:
+    def __init__(self, snapshot):
+        self._snapshot = snapshot
+
+    def tick(self):
+        return {}
+
+    def snapshot(self):
+        return self._snapshot
+
+
+def _runner_for_snapshot(snapshot):
+    runner = TariffTrafficRunner.__new__(TariffTrafficRunner)
+    runner.use_go = True
+    runner._go_client = _FakeGoClient(snapshot)
+    runner.engine = None
+    runner._stop = _StopAfterOneLoop()
+    runner.interval = 0.0
+    runner._log = logging.getLogger("test.traffic.v2_runner")
+    return runner
 
 
 def test_transform_go_snapshot_preserves_congestion_and_capacity_fields():
@@ -85,3 +119,31 @@ def test_go_snapshot_ws_change_helpers_preserve_congestion_and_capacity_fields()
             "congested": False,
         }
     ]
+
+
+def test_run_loop_publishes_empty_metric_events_for_empty_go_snapshot(monkeypatch):
+    published = []
+    monkeypatch.setattr("backend.events.publish", lambda event: published.append(event))
+    monkeypatch.setattr(v2_engine, "LATEST_V2_SNAPSHOT", None)
+    monkeypatch.setattr(v2_engine, "LAST_NONEMPTY_V2_SNAPSHOT", None)
+
+    runner = _runner_for_snapshot({"tick": 42, "device_metrics": {}, "link_metrics": {}})
+    runner._run_loop()
+
+    assert [event.type for event in published] == [
+        "deviceMetricsUpdated",
+        "linkMetricsUpdated",
+    ]
+    assert published[0].payload == {"devices": [], "tick": 42, "authoritative": True}
+    assert published[1].payload == {"links": [], "tick": 42, "authoritative": True}
+
+
+def test_run_loop_skips_metric_events_when_go_snapshot_missing(monkeypatch):
+    published = []
+    monkeypatch.setattr("backend.events.publish", lambda event: published.append(event))
+    monkeypatch.setattr(v2_engine, "LATEST_V2_SNAPSHOT", None)
+
+    runner = _runner_for_snapshot(None)
+    runner._run_loop()
+
+    assert published == []

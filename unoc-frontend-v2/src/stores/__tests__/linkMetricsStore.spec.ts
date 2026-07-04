@@ -36,15 +36,28 @@ describe('linkMetricsStore', () => {
     // Stale update should be ignored
     eventBus.emit('linkMetricsUpdated', {
       type: 'linkMetricsUpdated',
-      payload: { tick: 2, links: [{ id: 'l_core', bps: 999, utilization: 9.99, version: 1 }] }
+      payload: {
+        tick: 2,
+        links: [
+          { id: 'l_core', bps: 999, utilization: 9.99, version: 1 },
+          { id: 'l_leaf', bps: 100_000_000, utilization: 0.1, version: 1 }
+        ]
+      }
     })
     expect(s.byId.l_core).toEqual({ bps: 200_000_000, utilization: 0.2, version: 1 })
 
     // Update without explicit version increments previous by 1
     eventBus.emit('linkMetricsUpdated', {
       type: 'linkMetricsUpdated',
-      payload: { tick: 3, links: [{ id: 'l_leaf', bps: 110_000_000, utilization: 0.11 }] }
+      payload: {
+        tick: 3,
+        links: [
+          { id: 'l_core', bps: 200_000_000, utilization: 0.2, version: 1 },
+          { id: 'l_leaf', bps: 110_000_000, utilization: 0.11 }
+        ]
+      }
     })
+    expect(s.byId.l_core).toEqual({ bps: 200_000_000, utilization: 0.2, version: 1 })
     expect(s.byId.l_leaf).toEqual({ bps: 110_000_000, utilization: 0.11, version: 2 })
   })
 
@@ -134,5 +147,72 @@ describe('linkMetricsStore', () => {
     expect(s.byId.uplink1.bps).toBe(1_100_000_000)
     expect(s.byId.uplink1.demand_up_bps).toBe(300_000_000)
     expect(s.byId.uplink1.demand_down_bps).toBe(1_500_000_000)
+  })
+
+  it('linkMetricsUpdated removes links absent from authoritative events', () => {
+    const s = useLinkMetricsStore()
+    s.initRealtime()
+
+    eventBus.emit('linkMetricsUpdated', {
+      type: 'linkMetricsUpdated',
+      payload: {
+        tick: 1,
+        authoritative: true,
+        links: [
+          { id: 'l_core', bps: 200_000_000, utilization: 0.2, version: 1 },
+          { id: 'l_leaf', bps: 100_000_000, utilization: 0.1, version: 1 }
+        ]
+      }
+    })
+    expect(Object.keys(s.byId).sort()).toEqual(['l_core', 'l_leaf'])
+
+    eventBus.emit('linkMetricsUpdated', {
+      type: 'linkMetricsUpdated',
+      payload: {
+        tick: 2,
+        authoritative: true,
+        links: [{ id: 'l_leaf', bps: 110_000_000, utilization: 0.11, version: 2 }]
+      }
+    })
+    expect(Object.keys(s.byId)).toEqual(['l_leaf'])
+    expect(s.byId.l_leaf).toEqual({ bps: 110_000_000, utilization: 0.11, version: 2 })
+    expect(s.lastTick).toBe(2)
+
+    eventBus.emit('linkMetricsUpdated', {
+      type: 'linkMetricsUpdated',
+      payload: { tick: 3, authoritative: true, links: [] }
+    })
+    expect(s.byId).toEqual({})
+    expect(s.lastTick).toBe(3)
+  })
+
+  it('linkMetricsUpdated without authoritative flag keeps absent links', () => {
+    const s = useLinkMetricsStore()
+    s.initRealtime()
+    s.applySnapshot({
+      lastTick: 1,
+      links: {
+        l_core: { bps: 200_000_000, utilization: 0.2, version: 1 },
+        l_leaf: { bps: 100_000_000, utilization: 0.1, version: 1 }
+      }
+    })
+
+    eventBus.emit('linkMetricsUpdated', {
+      type: 'linkMetricsUpdated',
+      payload: {
+        tick: 2,
+        links: [{ id: 'l_leaf', bps: 110_000_000, utilization: 0.11, version: 2 }]
+      }
+    })
+    expect(Object.keys(s.byId).sort()).toEqual(['l_core', 'l_leaf'])
+    expect(s.byId.l_core).toEqual({ bps: 200_000_000, utilization: 0.2, version: 1 })
+    expect(s.byId.l_leaf).toEqual({ bps: 110_000_000, utilization: 0.11, version: 2 })
+
+    eventBus.emit('linkMetricsUpdated', {
+      type: 'linkMetricsUpdated',
+      payload: { tick: 3, links: [] }
+    })
+    expect(Object.keys(s.byId).sort()).toEqual(['l_core', 'l_leaf'])
+    expect(s.lastTick).toBe(3)
   })
 })
