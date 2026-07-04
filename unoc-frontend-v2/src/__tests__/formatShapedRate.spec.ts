@@ -8,6 +8,7 @@ import {
 describe('formatBpsCompact', () => {
   it('formats magnitudes compactly', () => {
     expect(formatBpsCompact(1_500_000_000)).toBe('1.5G')
+    expect(formatBpsCompact(92_000_000_000)).toBe('92G')
     expect(formatBpsCompact(330_000_000)).toBe('330M')
     expect(formatBpsCompact(5_000)).toBe('5K')
     expect(formatBpsCompact(42)).toBe('42b')

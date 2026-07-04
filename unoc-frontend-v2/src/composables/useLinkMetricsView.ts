@@ -24,7 +24,10 @@ export const THROTTLE_SCALE_THRESHOLD = 0.98
 export function formatBpsCompact(v: number | null | undefined): string {
   if (v == null || Number.isNaN(v)) return '—'
   const abs = Math.abs(v)
-  if (abs >= 1e9) return `${(v / 1e9).toFixed(1)}G`
+  if (abs >= 1e9) {
+    const gbps = v / 1e9
+    return `${Number.isInteger(gbps) ? gbps.toFixed(0) : gbps.toFixed(1)}G`
+  }
   if (abs >= 1e6) return `${Math.round(v / 1e6)}M`
   if (abs >= 1e3) return `${Math.round(v / 1e3)}K`
   return `${Math.round(v)}b`
@@ -47,6 +50,25 @@ export function formatShapedRate(
     return `${formatBpsCompact(deliveredBps)} / ${formatBpsCompact(demandBps)}`
   }
   return formatBps(deliveredBps)
+}
+
+export function shapedRateParts(
+  deliveredBps: number | null | undefined,
+  demandBps: number | null | undefined,
+  scale: number | null | undefined
+): { delivered: string; request: string | null } {
+  const hasDelivered = typeof deliveredBps === 'number' && !Number.isNaN(deliveredBps)
+  const throttled =
+    hasDelivered &&
+    typeof scale === 'number' &&
+    scale < THROTTLE_SCALE_THRESHOLD &&
+    typeof demandBps === 'number' &&
+    demandBps > 0
+
+  return {
+    delivered: formatBps(deliveredBps),
+    request: throttled ? `req ${formatBpsCompact(demandBps)}` : null
+  }
 }
 
 export function useLinkMetricsView(linkId: ComputedRef<string>) {

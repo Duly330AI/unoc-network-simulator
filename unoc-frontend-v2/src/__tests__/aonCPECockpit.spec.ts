@@ -43,7 +43,7 @@ describe('AONCPECockpit', () => {
     expect(txt).not.toContain('RX POWER:')
   })
 
-  it('shows delivered / requested when a direction is throttled by shaping', async () => {
+  it('shows delivered primary and requested demand as a muted label when throttled', async () => {
     setActivePinia(createPinia())
     const metrics = useMetricsStore()
     const devices = useDevicesStore()
@@ -70,10 +70,17 @@ describe('AONCPECockpit', () => {
 
     const w = mount(AONCPECockpit, { props: { deviceId: 'cpe1' } })
     const txt = w.text()
-    // Downstream is throttled: compact "delivered / requested"
-    expect(txt).toContain('330M / 500M')
+    const tspans = w.findAll('tspan')
+    const tspanText = tspans.map((node) => node.text())
+
+    // Downstream is throttled: delivered remains the hero value, demand is secondary.
+    expect(tspanText).toContain('330.00 Mbps')
+    expect(tspanText).toContain('req 500M')
+    expect(tspans.find((node) => node.text() === 'req 500M')?.attributes('font-size')).toBe('7px')
+    expect(tspans.find((node) => node.text() === 'req 500M')?.attributes('fill')).toBe('#c7a76a')
     // Upstream is not throttled: plain delivered value
     expect(txt).toContain('100.00 Mbps')
     expect(txt).not.toContain('100M / 100M')
+    expect(txt).not.toContain('330M / 500M')
   })
 })

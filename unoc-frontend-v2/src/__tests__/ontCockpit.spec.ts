@@ -67,6 +67,37 @@ describe('ONTCockpit', () => {
     expect(rects.length).toBeGreaterThan(0)
   })
 
+  it('shows throttled traffic as delivered primary with muted request labels', () => {
+    seedOnt('UP', 'OK')
+    const metrics = useMetricsStore()
+    metrics.byId.ont1 = {
+      bps: 2_000_000_000,
+      utilization: 0.5,
+      version: 2,
+      upstream_bps: 1_000_000_000,
+      downstream_bps: 1_000_000_000,
+      demand_up_bps: 92_000_000_000,
+      demand_down_bps: 92_000_000_000,
+      scale_up: 0.011,
+      scale_down: 0.011,
+      throttled: true
+    }
+
+    const w = mountOnt()
+    const tspans = w.findAll('tspan')
+    const tspanText = tspans.map((node) => node.text())
+    const trafficRows = w.findAll('text').filter((node) => node.text().includes('req 92G'))
+
+    expect(tspanText.filter((text) => text === '1.00 Gbps')).toHaveLength(2)
+    expect(tspanText.filter((text) => text === 'req 92G')).toHaveLength(2)
+    expect(tspans.filter((node) => node.text() === 'req 92G').every((node) => node.attributes('font-size') === '7px')).toBe(true)
+    expect(tspans.filter((node) => node.text() === 'req 92G').every((node) => node.attributes('fill') === '#c7a76a')).toBe(true)
+    expect(trafficRows.map((node) => node.attributes('fill'))).toEqual(
+      expect.arrayContaining(['#64b5f6', '#ffa726'])
+    )
+    expect(trafficRows.map((node) => node.attributes('fill'))).not.toContain('#ff9800')
+  })
+
   it('lights green for UP with OK optical signal', () => {
     seedOnt('UP', 'OK')
     const w = mountOnt()

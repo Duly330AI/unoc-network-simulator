@@ -41,14 +41,20 @@ x="-58" y="-20" text-anchor="start" :fill="headerColor" font-size="10px"
                     font-family="var(--font-mono, monospace)">UPSTREAM:</text>
                 <text
 :x="58" :y="18" text-anchor="end" :fill="upColor" font-size="10px"
-                    font-family="var(--font-mono, monospace)">{{ upstreamText }}</text>
+                    font-family="var(--font-mono, monospace)">
+                    <tspan>{{ upstreamParts.delivered }}</tspan>
+                    <tspan v-if="upstreamParts.request" dx="3" :fill="requestColor" font-size="7px">{{ upstreamParts.request }}</tspan>
+                </text>
 
                 <text
 :x="-58" :y="32" text-anchor="start" :fill="labelColor" font-size="10px"
                     font-family="var(--font-mono, monospace)">DOWNSTREAM:</text>
                 <text
 :x="58" :y="32" text-anchor="end" :fill="downColor" font-size="10px"
-                    font-family="var(--font-mono, monospace)">{{ downstreamText }}</text>
+                    font-family="var(--font-mono, monospace)">
+                    <tspan>{{ downstreamParts.delivered }}</tspan>
+                    <tspan v-if="downstreamParts.request" dx="3" :fill="requestColor" font-size="7px">{{ downstreamParts.request }}</tspan>
+                </text>
             </g>
         </g>
 
@@ -66,10 +72,7 @@ import { computed, onMounted, watch } from 'vue'
 import { useDevicesStore } from '../../stores/devicesStore.js'
 import { useMetricsStore } from '../../stores/metricsStore.js'
 import { useTariffsStore } from '../../stores/tariffsStore'
-import {
-    formatShapedRate,
-    THROTTLE_SCALE_THRESHOLD
-} from '../../composables/useLinkMetricsView.js'
+import { shapedRateParts } from '../../composables/useLinkMetricsView.js'
 import { deriveNodeVisualStatus } from '../../composables/topologyCore/status.js'
 
 const props = defineProps<{ deviceId: string }>()
@@ -86,6 +89,7 @@ const visualStatus = computed(() =>
 // Styling/colors consistent with other Digital Display cockpits
 const headerColor = '#cfd8dc'
 const labelColor = '#eceff1'
+const requestColor = '#c7a76a'
 function ledColor(key: 'UP' | 'DEGRADED' | 'DOWN') {
     if (key === 'UP') return '#66bb6a'
     if (key === 'DEGRADED') return '#ef6c00'
@@ -101,30 +105,21 @@ const statusColor = computed(() => {
     if (visualStatus.value === 'DOWN') return '#ef5350'
     return '#b0bec5'
 })
-// Metrics (delivered values; when shaping throttles a direction the row shows
-// "delivered / requested" and turns amber)
+// Metrics: delivered stays primary; throttled demand is a muted request label.
 const metric = computed(() => metrics.byId[props.deviceId])
-const upThrottled = computed(() => {
-    const s = metric.value?.scale_up
-    return typeof s === 'number' && s < THROTTLE_SCALE_THRESHOLD
-})
-const downThrottled = computed(() => {
-    const s = metric.value?.scale_down
-    return typeof s === 'number' && s < THROTTLE_SCALE_THRESHOLD
-})
-const upColor = computed(() => (upThrottled.value ? '#ff9800' : '#64b5f6'))
-const downColor = computed(() => (downThrottled.value ? '#ff9800' : '#ffa726'))
-const upstreamText = computed(() => {
+const upColor = '#64b5f6'
+const downColor = '#ffa726'
+const upstreamParts = computed(() => {
     const m = metric.value
-    if (!m) return '—'
+    if (!m) return { delivered: '—', request: null }
     const v = typeof m.upstream_bps === 'number' ? m.upstream_bps : m.bps / 2
-    return formatShapedRate(v, m.demand_up_bps, m.scale_up)
+    return shapedRateParts(v, m.demand_up_bps, m.scale_up)
 })
-const downstreamText = computed(() => {
+const downstreamParts = computed(() => {
     const m = metric.value
-    if (!m) return '—'
+    if (!m) return { delivered: '—', request: null }
     const v = typeof m.downstream_bps === 'number' ? m.downstream_bps : m.bps / 2
-    return formatShapedRate(v, m.demand_down_bps, m.scale_down)
+    return shapedRateParts(v, m.demand_down_bps, m.scale_down)
 })
 
 // Signal (ONT-family only; neutral otherwise)
