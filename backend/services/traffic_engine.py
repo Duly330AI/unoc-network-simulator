@@ -24,7 +24,7 @@ def get_v2_snapshot() -> dict | None:
     """
     # Read the live module attribute to observe per-tick reassignments
     snap = getattr(_v2_engine, "LATEST_V2_SNAPSHOT", None)
-    if isinstance(snap, dict) and (snap.get("devices") or snap.get("links")):
+    if isinstance(snap, dict):
         return snap
     # Fallback to last non-empty snapshot produced by any tick
     last_good = getattr(_v2_engine, "LAST_NONEMPTY_V2_SNAPSHOT", None)
