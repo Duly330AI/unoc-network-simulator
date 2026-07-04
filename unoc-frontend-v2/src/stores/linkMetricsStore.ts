@@ -50,13 +50,17 @@ export const useLinkMetricsStore = defineStore('linkMetrics', {
             demand_down_bps?: number
           }>
           tick?: number
+          authoritative?: boolean
         }
         const items = payload.links || []
         const tick = typeof payload.tick === 'number' ? payload.tick : this.lastTick
+        const authoritative = payload.authoritative === true
         // One clone per event, not per item (was O(n²) per tick)
+        const incomingIds = new Set<string>()
         let next: Record<string, LinkMetric> | null = null
         for (const it of items) {
           if (!it || !it.id) continue
+          incomingIds.add(it.id)
           const cur = this.byId[it.id]
           const incomingVersion =
             typeof it.version === 'number' ? it.version : (cur?.version ?? 0) + 1
@@ -76,6 +80,14 @@ export const useLinkMetricsStore = defineStore('linkMetrics', {
             if (typeof demandUp === 'number') metric.demand_up_bps = demandUp
             if (typeof demandDown === 'number') metric.demand_down_bps = demandDown
             next[it.id] = metric
+          }
+        }
+        if (authoritative) {
+          for (const id of Object.keys(this.byId)) {
+            if (!incomingIds.has(id)) {
+              if (!next) next = { ...this.byId }
+              delete next[id]
+            }
           }
         }
         if (next) this.byId = next

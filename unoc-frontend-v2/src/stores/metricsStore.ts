@@ -67,14 +67,18 @@ export const useMetricsStore = defineStore('metrics', {
             throttled?: boolean
           }>
           tick?: number
+          authoritative?: boolean
         }
         const items = payload.devices || []
         const tick = typeof payload.tick === 'number' ? payload.tick : this.lastTick
+        const authoritative = payload.authoritative === true
         // Apply version-checked updates into ONE clone per event (a clone per
         // item made this O(n²) per tick and was a real RAM/CPU hog at scale)
+        const incomingIds = new Set<string>()
         let next: Record<string, DeviceMetric> | null = null
         for (const it of items) {
           if (!it || !it.id) continue
+          incomingIds.add(it.id)
           const cur = this.byId[it.id]
           const incomingVersion =
             typeof it.version === 'number' ? it.version : (cur?.version ?? 0) + 1
@@ -102,6 +106,14 @@ export const useMetricsStore = defineStore('metrics', {
             if (typeof scaleDown === 'number') metric.scale_down = scaleDown
             if (typeof throttled === 'boolean') metric.throttled = throttled
             next[it.id] = metric
+          }
+        }
+        if (authoritative) {
+          for (const id of Object.keys(this.byId)) {
+            if (!incomingIds.has(id)) {
+              if (!next) next = { ...this.byId }
+              delete next[id]
+            }
           }
         }
         if (next) this.byId = next

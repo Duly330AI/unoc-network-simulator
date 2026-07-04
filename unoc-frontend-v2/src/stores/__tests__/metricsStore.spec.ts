@@ -143,15 +143,92 @@ describe('metricsStore', () => {
     // stale update for A (version 1) should be ignored
     eventBus.emit('deviceMetricsUpdated', {
       type: 'deviceMetricsUpdated',
-      payload: { tick: 3, devices: [{ id: 'A', bps: 99, utilization: 0.99, version: 1 }] }
+      payload: {
+        tick: 3,
+        devices: [
+          { id: 'A', bps: 99, utilization: 0.99, version: 1 },
+          { id: 'B', bps: 9, utilization: 0.9, version: 1 }
+        ]
+      }
     })
 
     expect(s.byId.A).toEqual({ bps: 5, utilization: 0.2, version: 2 })
     // but B can be updated with implicit version increment when missing
     eventBus.emit('deviceMetricsUpdated', {
       type: 'deviceMetricsUpdated',
-      payload: { tick: 4, devices: [{ id: 'B', bps: 10, utilization: 1.0 }] }
+      payload: {
+        tick: 4,
+        devices: [
+          { id: 'A', bps: 5, utilization: 0.2, version: 2 },
+          { id: 'B', bps: 10, utilization: 1.0 }
+        ]
+      }
     })
+    expect(s.byId.A).toEqual({ bps: 5, utilization: 0.2, version: 2 })
     expect(s.byId.B).toEqual({ bps: 10, utilization: 1.0, version: 2 })
+  })
+
+  it('deviceMetricsUpdated removes devices absent from authoritative events', () => {
+    const s = useMetricsStore()
+    s.initRealtime()
+
+    eventBus.emit('deviceMetricsUpdated', {
+      type: 'deviceMetricsUpdated',
+      payload: {
+        tick: 1,
+        authoritative: true,
+        devices: [
+          { id: 'A', bps: 10, utilization: 0.1, version: 1 },
+          { id: 'B', bps: 20, utilization: 0.2, version: 1 }
+        ]
+      }
+    })
+    expect(Object.keys(s.byId).sort()).toEqual(['A', 'B'])
+
+    eventBus.emit('deviceMetricsUpdated', {
+      type: 'deviceMetricsUpdated',
+      payload: {
+        tick: 2,
+        authoritative: true,
+        devices: [{ id: 'B', bps: 25, utilization: 0.25, version: 2 }]
+      }
+    })
+    expect(Object.keys(s.byId)).toEqual(['B'])
+    expect(s.byId.B).toEqual({ bps: 25, utilization: 0.25, version: 2 })
+    expect(s.lastTick).toBe(2)
+
+    eventBus.emit('deviceMetricsUpdated', {
+      type: 'deviceMetricsUpdated',
+      payload: { tick: 3, authoritative: true, devices: [] }
+    })
+    expect(s.byId).toEqual({})
+    expect(s.lastTick).toBe(3)
+  })
+
+  it('deviceMetricsUpdated without authoritative flag keeps absent devices', () => {
+    const s = useMetricsStore()
+    s.initRealtime()
+    s.applySnapshot({
+      devices: {
+        A: { bps: 10, utilization: 0.1, version: 1 },
+        B: { bps: 20, utilization: 0.2, version: 1 }
+      },
+      lastTick: 1
+    })
+
+    eventBus.emit('deviceMetricsUpdated', {
+      type: 'deviceMetricsUpdated',
+      payload: { tick: 2, devices: [{ id: 'B', bps: 25, utilization: 0.25, version: 2 }] }
+    })
+    expect(Object.keys(s.byId).sort()).toEqual(['A', 'B'])
+    expect(s.byId.A).toEqual({ bps: 10, utilization: 0.1, version: 1 })
+    expect(s.byId.B).toEqual({ bps: 25, utilization: 0.25, version: 2 })
+
+    eventBus.emit('deviceMetricsUpdated', {
+      type: 'deviceMetricsUpdated',
+      payload: { tick: 3, devices: [] }
+    })
+    expect(Object.keys(s.byId).sort()).toEqual(['A', 'B'])
+    expect(s.lastTick).toBe(3)
   })
 })
