@@ -10,6 +10,8 @@ function devicesFixture() {
     { id: 'a', name: 'A', type: 'EDGE_ROUTER' },
     { id: 'b', name: 'B', type: 'EDGE_ROUTER' },
     { id: 'c', name: 'C', type: 'CORE_ROUTER' },
+    { id: 'pop', name: 'POP', type: 'POP' },
+    { id: 'pop-child', name: 'POP Child', type: 'CORE_ROUTER', parent_container_id: 'pop' },
     { id: 'o1', name: 'O1', type: 'ONT' },
     { id: 'o2', name: 'O2', type: 'ONT' }
   ]
@@ -88,5 +90,80 @@ describe('Multi-Link Creation Workflow (handlers)', () => {
     expect(spyCreate).not.toHaveBeenCalled()
     expect(linkTool.active).toBe(false)
     expect(linkTool.mode).toBe('single')
+  })
+
+  it('creates a single link headlessly unless Alt is held', async () => {
+    const devices = useDevicesStore()
+    const links = useLinksStore()
+    const selection = useSelectionStore()
+    devices.devices = devicesFixture() as any
+
+    const linkTool = {
+      active: true,
+      mode: 'single' as const,
+      sources: [],
+      startDevice: 'a',
+      hoverDevice: null
+    }
+    const spyCreate = vi.spyOn(links, 'createBetweenDevices').mockResolvedValue(undefined as any)
+    const handler = makeDeviceClickHandler(
+      linkTool as any,
+      devices as any,
+      links as any,
+      selection as any,
+      () => {},
+      () => {}
+    )
+
+    await handler({ stopPropagation: () => {}, altKey: false } as unknown as MouseEvent, {
+      id: 'b',
+      type: 'EDGE_ROUTER'
+    })
+    expect(spyCreate).toHaveBeenCalledWith('a', 'b', { headless: true })
+
+    linkTool.startDevice = 'a'
+    await handler({ stopPropagation: () => {}, altKey: true } as unknown as MouseEvent, {
+      id: 'b',
+      type: 'EDGE_ROUTER'
+    })
+    expect(spyCreate).toHaveBeenLastCalledWith('a', 'b', { headless: false })
+  })
+
+  it('preserves Alt behavior when confirming a container proxy target', async () => {
+    const devices = useDevicesStore()
+    const links = useLinksStore()
+    const selection = useSelectionStore()
+    devices.devices = devicesFixture() as any
+
+    const linkTool = {
+      active: true,
+      mode: 'single' as const,
+      sources: [],
+      startDevice: 'a',
+      hoverDevice: null
+    }
+    const spyCreate = vi.spyOn(links, 'createBetweenDevices').mockResolvedValue(undefined as any)
+    const handler = makeDeviceClickHandler(
+      linkTool as any,
+      devices as any,
+      links as any,
+      selection as any,
+      () => {},
+      () => {}
+    )
+    const dispatch = vi.spyOn(window, 'dispatchEvent')
+
+    await handler({ stopPropagation: () => {}, altKey: true } as unknown as MouseEvent, {
+      id: 'pop',
+      type: 'POP'
+    })
+    const event = dispatch.mock.calls.find(
+      ([ev]) => ev.type === 'unoc:openLinkProxySelector'
+    )?.[0] as CustomEvent
+
+    await event.detail.confirm('pop-child')
+
+    expect(spyCreate).toHaveBeenCalledWith('a', 'pop-child', { headless: false })
+    dispatch.mockRestore()
   })
 })
