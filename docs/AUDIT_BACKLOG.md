@@ -13,10 +13,13 @@ manual QA. Roughly priority-ordered. Shipped items kept for context. Tick items 
   from a real fault. (#1 partial — state-hygiene visibility)
 - **Batch 4 — EventStore telemetry skip**: ephemeral metrics/congestion events no longer persisted to
   the EventStore; fixes intermittent device-create 500/409 (sequence collision) + eventstore bloat.
+- **Batch 5 — deterministic port ordering**: port summaries sorted in natural order (shared helper);
+  subscriber / PON port-matrix cells no longer jump between refreshes. (#2)
 
 ## Next up (prioritized)
 
 ### EventStore root fix — atomic sequence · backend · MEDIUM · reliability
+
 `_next_sequence` uses non-atomic `MAX(sequence)+1` (`backend/services/event_store.py`). Batch 4 removed
 the constant telemetry writer so collisions are now rare, but concurrent domain-event writes can still
 race. Root fix: allocate `sequence` via a Postgres native sequence / IDENTITY (or advisory lock).
@@ -28,9 +31,6 @@ EventStore-schema-sensitive (AGENTS.md caution) — own batch, scope carefully.
   "demand" (tariff) which reads as if traffic is lost upstream (it is not — link-capped shaping is
   correct). Make delivered primary, demand clearly secondary; drop the misleading `throttled` marker on
   transit devices. Resolves the "CPE delivers more than the switch can take" perception.
-- **#2 subscriber-indicator determinism** · frontend · LOW-MED. Access-port cells are positioned by array
-  index over an unsorted `portIfaces`, so cells jump between refreshes. Sort by a stable port key before
-  layout (`AONSwitchCockpit.vue` + `usePortSummary*`; ideally order server-side in port-summary-service).
 - **#6 link-defaults hydration** · frontend/backend · LOW-MED. New links show blank `length_km` /
   `physical_medium_id` until an update saves. Backend derives defaults on create and returns them —
   hydrate the create response into the link store, and guarantee a default medium for every FIBER/P2P.
@@ -52,3 +52,10 @@ EventStore-schema-sensitive (AGENTS.md caution) — own batch, scope carefully.
 - **Node redesign (long-term)** · frontend · LARGE. Nodes should have a clear, device-type-dependent
   structure with later polish (meaningful animated elements). Current cockpit layout is placeholder-ish;
   the OVR badge position is "good enough until the redesign".
+
+## Watch / low-priority
+
+- **optical-service reachability blips** · infra · LOW. `/api/debug/go-services` intermittently reports
+  `partial_fallback (4/5)` with optical-service on Python fallback during status checks, then recovers to
+  `go_active 5/5` (no crash in its err log). Likely a brief health-check timeout. Only investigate if it
+  starts degrading actual optical recomputes; ties into finding #9 (make fallback fail-fast for audits).
