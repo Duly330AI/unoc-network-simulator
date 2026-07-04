@@ -59,6 +59,19 @@ _CURRENT_BROADCASTER: Broadcaster = NoOpBroadcaster()
 # Optional websocket publish hook (registered by ws module at import time)
 _WS_PUBLISH: Callable[[Event], None] | None = None
 
+_NON_PERSISTED_RUNTIME_EVENT_TYPES = frozenset(
+    {
+        "deviceMetricsUpdated",
+        "linkMetricsUpdated",
+        "device.congestion.detected",
+        "device.congestion.cleared",
+        "link.congestion.detected",
+        "link.congestion.cleared",
+        "segment.congestion.detected",
+        "segment.congestion.cleared",
+    }
+)
+
 
 class DelegatingBroadcaster:
     """Proxy that always forwards to the current broadcaster.
@@ -172,12 +185,13 @@ def publish(event: Event) -> None:
     finally:
         # Always record even if broadcaster fails
         record_event(event)
-        try:
-            from backend.services.event_store import append_runtime_event
+        if event.type not in _NON_PERSISTED_RUNTIME_EVENT_TYPES:
+            try:
+                from backend.services.event_store import append_runtime_event
 
-            append_runtime_event(event)
-        except Exception:
-            pass
+                append_runtime_event(event)
+            except Exception:
+                pass
 
 
 def get_event_counts() -> dict[str, int]:

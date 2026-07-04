@@ -180,7 +180,7 @@ export function drawNodes(options: {
   const overrideBadge = nodeGroupsEnter
     .append('g')
     .attr('class', 'override-badge')
-    .attr('transform', 'translate(-118,-58)')
+    .attr('transform', 'translate(-132,-84)')
   overrideBadge
     .append('rect')
     .attr('class', 'override-badge-bg')
