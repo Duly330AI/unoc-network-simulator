@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from backend import events
 from backend.api.schemas import DeviceOut, ProvisionResponse
+from backend.clients.go_services.status_client import get_status_client
 from backend.db import get_session, init_db
 from backend.models import Device
 from backend.services import recompute_coalescer as coalescer
@@ -36,6 +37,15 @@ def _provision_device_guarded(device_id: str, background: BackgroundTasks):
             coalescer.schedule(scope="devices", key=d.id)
         except Exception:  # pragma: no cover
             pass
+        try:
+            status_client = get_status_client()
+            if status_client:
+                status_client.propagate_status(
+                    changed_device_ids=[d.id], changed_link_ids=[], update_database=True
+                )
+        except Exception as e:
+            # Best-effort; the coalescer schedule remains as a fallback.
+            print(f"[WARN] Status propagation failed after provision: {e}")
         # Offload optical recompute to background
         schedule(background, _recompute_after_device_provision, d.id)
         # Emit device.status.changed immediately if transitioned
