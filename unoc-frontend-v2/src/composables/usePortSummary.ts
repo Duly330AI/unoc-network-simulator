@@ -1,4 +1,5 @@
 import { onUnmounted, ref, type Ref, unref, watch } from 'vue'
+import { sortInterfaceSummaries } from './portSummaryOrdering.js'
 
 export type InterfaceSummary = {
   id?: string
@@ -40,7 +41,7 @@ export function usePortSummary(deviceId: Ref<string> | string, pollMs = 0) {
       if (token !== currentToken) return
       if (Array.isArray(data)) {
         // Expect list[InterfaceSummaryOut]
-        interfaces.value = (data as unknown[]).map((x) => {
+        const parsed = (data as unknown[]).map((x) => {
           const r = x as Record<string, unknown>
           return {
             id: (r.id as string) ?? undefined,
@@ -60,6 +61,8 @@ export function usePortSummary(deviceId: Ref<string> | string, pollMs = 0) {
                   : Number(r.capacity) || 0
           } satisfies InterfaceSummary
         })
+
+        interfaces.value = sortInterfaceSummaries(parsed)
       } else {
         interfaces.value = []
       }

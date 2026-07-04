@@ -1,5 +1,6 @@
 import { ref, computed, watch, onUnmounted, type Ref, shallowRef, triggerRef } from 'vue'
 import { logger } from '../utils/logger.js'
+import { sortInterfaceSummaries } from './portSummaryOrdering.js'
 
 export type InterfaceSummary = {
   id?: string
@@ -164,8 +165,10 @@ class PortSummaryManager {
               } satisfies InterfaceSummary
             })
 
-            logger.debug(`[PortSummaryManager] Cached ${deviceId}: ${parsed.length} interfaces`)
-            this.cache.set(deviceId, { data: parsed, timestamp: now })
+            const sorted = sortInterfaceSummaries(parsed)
+
+            logger.debug(`[PortSummaryManager] Cached ${deviceId}: ${sorted.length} interfaces`)
+            this.cache.set(deviceId, { data: sorted, timestamp: now })
           }
         }
         // CRITICAL: Notify Vue components that cache has updated
