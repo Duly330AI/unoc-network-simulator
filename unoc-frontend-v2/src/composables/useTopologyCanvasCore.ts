@@ -171,7 +171,9 @@ export function useTopologyCanvasCore(deps: TopologyCanvasDeps) {
     if (e.key === 'l' || e.key === 'L') {
       const devIds = selection.items.filter((i: any) => i.kind === 'device').map((i: any) => i.id)
       if (devIds.length === 2) {
-        linksStore.createBetweenDevices(devIds[0], devIds[1]).then(() => redraw())
+        linksStore
+          .createBetweenDevices(devIds[0], devIds[1], { headless: !e.altKey })
+          .then(() => redraw())
       }
     }
     if (e.key === 'Escape') {

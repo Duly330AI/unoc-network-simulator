@@ -138,7 +138,7 @@ export function makeDeviceClickHandler(
           }
           const confirm = async (targetId: string | null) => {
             if (!targetId) return
-            await linksStore.createBetweenDevices(sourceId, targetId)
+            await linksStore.createBetweenDevices(sourceId, targetId, { headless: !event.altKey })
           }
           const cancel = () => {
             /* no-op */
@@ -164,7 +164,9 @@ export function makeDeviceClickHandler(
           redraw()
           return
         }
-        await linksStore.createBetweenDevices(linkTool.startDevice, d.id)
+        await linksStore.createBetweenDevices(linkTool.startDevice, d.id, {
+          headless: !event.altKey
+        })
         linkTool.startDevice = null
         linkTool.hoverDevice = null
         redraw()
