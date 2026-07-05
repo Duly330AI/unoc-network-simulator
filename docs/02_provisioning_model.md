@@ -47,35 +47,32 @@ Important runtime behavior:
 5. Interface uniqueness (no duplicate management interface).
 6. Concurrency guard (re-check provisioned state before commit/final write).
 
-## 4. Provision Algorithm (TypeScript Pseudocode)
+## 4. Provision Algorithm (Backend Pseudocode)
 
-```ts
-async function provisionDevice(deviceId: string) {
-  await prisma.$transaction(async (tx) => {
-    const device = await tx.device.findUniqueOrThrow({ where: { id: deviceId } });
+```python
+def provision_device_flow(session, device_id: str):
+    device = session.get(Device, device_id)
+    if device is None:
+        raise NotFound()
 
-    assertProvisionable(device);
-    assertNotProvisioned(device);
-    await validateDependencies(tx, device);
-    await validateContainerRules(tx, device);
+    assert_provisionable(device)
+    assert_not_provisioned(device)
+    validate_dependencies(session, device)
+    validate_container_rules(session, device)
 
-    const poolKey = mapDeviceToPool(device.type);
-    await ensureIpPool(tx, poolKey);
-    const ip = await allocateNextIp(tx, poolKey, device.id);
+    pool_key = map_device_to_pool(device.type)
+    ensure_ip_pool(session, pool_key)
+    ip = allocate_next_ip(session, pool_key, device.id)
 
-    await createManagementInterface(tx, device.id, ip);
+    create_management_interface(session, device.id, ip)
+    device.provisioned = True
+    session.add(device)
+    session.commit()
 
-    await tx.device.update({
-      where: { id: device.id },
-      data: { provisioned: true },
-    });
-  });
-
-  // async post-commit hooks
-  await recomputeStatusPhase1(deviceId);
-  await triggerOpticalRecomputeIfNeeded(deviceId, "provision");
-  emitProvisionDeltas(deviceId);
-}
+    # post-commit hooks
+    persist_status_via_status_service(device.id)
+    trigger_optical_recompute_if_needed(device.id, "provision")
+    emit_provision_deltas(device.id)
 ```
 
 ## 5. Dependency Validation Matrix (Detailed)

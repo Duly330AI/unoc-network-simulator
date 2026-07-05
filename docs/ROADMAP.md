@@ -1,9 +1,9 @@
 # UNOC v3 Roadmap (Source-of-Truth)
 
 ## 0) Decision
-- `MASTER_SPEC_UNOC_LITE.md` ist als High-Level-Grundgerüst nützlich, aber **nicht mehr ausreichend** als Hauptanforderung.
+- `docs/MASTER_SPEC_UNOC_LITE.md` ist als High-Level-Grundgerüst nützlich, aber **nicht mehr ausreichend** als Hauptanforderung.
 - Ab jetzt ist diese Roadmap der operative Source-of-Truth für Umsetzung.
-- Empfehlung: `MASTER_SPEC_UNOC_LITE.md` zunächst **nicht löschen**, sondern als `ARCHIVE` behandeln, bis alle offenen Themen aus den Fachdokus in Tasks umgesetzt/abgenommen sind.
+- Empfehlung: `docs/MASTER_SPEC_UNOC_LITE.md` zunächst **nicht löschen**, sondern als `ARCHIVE` behandeln, bis alle offenen Themen aus den Fachdokus in Tasks umgesetzt/abgenommen sind.
 
 ## 1) Arbeitsregeln
 
@@ -2438,6 +2438,6 @@ Jeder erledigte oder blockierte Task bekommt direkt unter `Builder Log` einen ku
 6. TASK-045, 046, 048, 049, 050, 051, 052
 7. DEFERRED Tracks: TASK-028, TASK-029 (später)
 
-## 5) Hinweis zu MASTER_SPEC_UNOC_LITE.md
+## 5) Hinweis zu docs/MASTER_SPEC_UNOC_LITE.md
 - Empfohlene Aktion jetzt: **behalten + als Archiv markieren**, nicht löschen.
 - Empfohlene Aktion später (nach TASK-052): optional löschen oder in `docs/archive/` verschieben.

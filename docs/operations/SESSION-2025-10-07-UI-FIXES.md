@@ -163,7 +163,7 @@ test.skip('counts subscribers via BFS through access ports', () => {
 
 #### 1. Removed Deprecated Test Script
 
-**File:** `test_bulk_ports.py` (deleted)
+**File:** former ad-hoc bulk-port helper (deleted)
 
 **Problem:** Ad-hoc test script created `test-bulk-1` and `test-bulk-2` zombie devices when interrupted. Cleanup block wasn't in try/finally, causing devices to persist after crashes.
 
@@ -228,7 +228,7 @@ npm run test
 
 ### Cleanup
 
-- `test_bulk_ports.py` (**DELETED** - replaced by pytest)
+- Former ad-hoc bulk-port helper (**DELETED** - replaced by pytest)
 
 ---
 
@@ -307,7 +307,7 @@ All objectives achieved:
 - [x] DELETE 500 error resolved (verified correct implementation)
 - [x] Port capacity normalized (backend: capacity=1 for non-PON)
 - [x] Subscriber counts working (frontend: toRef + BFS/PON sum)
-- [x] Zombie devices cleaned up (test_bulk_ports.py deleted)
+- [x] Zombie devices cleaned up (ad-hoc bulk-port helper deleted)
 - [x] End-to-end validation passed (UI displays correct data)
 
 **Next Steps:**

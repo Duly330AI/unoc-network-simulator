@@ -58,7 +58,7 @@ flowchart LR
     API -.-> PortSummary
 ```
 
-The Go traffic engine is mandatory in the recovered stack. The optical, batch, status, and port-summary gRPC services are optional helpers with Python fallback or degraded behavior when unavailable.
+The Go traffic engine is mandatory in the full local stack. The optical, batch, status, and port-summary gRPC services are optional helpers with Python fallback or degraded behavior when unavailable.
 
 ## What I built / improved
 
@@ -71,7 +71,7 @@ See [docs/AUDIT_BACKLOG.md](docs/AUDIT_BACKLOG.md) for the shipped audit batches
 
 ## Quick start (reviewers)
 
-Use the verified recovered-stack guide in [docs/local_start.md](docs/local_start.md). From the repo root on Windows PowerShell:
+Use the verified local-stack guide in [docs/local_start.md](docs/local_start.md). From the repo root on Windows PowerShell:
 
 ```powershell
 .\scripts\start-stack-logged.ps1 -IncludeOptionalGoServices
@@ -105,19 +105,19 @@ One-time setup, database reset/seed commands, environment flags, and manual star
 - [unoc-frontend-v2/](unoc-frontend-v2/) - Vue 3 + Pinia + D3 topology UI.
 - [engine-go/](engine-go/) - Go traffic engine and gRPC helper services.
 - [docs/local_start.md](docs/local_start.md) - verified local startup guide.
-- [RECOVERY_STATUS.md](RECOVERY_STATUS.md) - recovered-stack status, environment notes, known drift.
+- [RECOVERY_STATUS.md](RECOVERY_STATUS.md) - recovery status, environment notes, known drift.
 - [docs/AUDIT_BACKLOG.md](docs/AUDIT_BACKLOG.md) - correctness/performance audit backlog and shipped batches.
 - [AGENTS.md](AGENTS.md) - repository operating rules and truth-model constraints.
 - [backend/tests/perf/bench_l3_recompute.py](backend/tests/perf/bench_l3_recompute.py) - reproducible L3 recompute micro-benchmark.
 
 ## Project status & limitations
 
-- Verified: the recovered local stack is Python/FastAPI + Vue 3 + Go services + PostgreSQL, with startup documented in [docs/local_start.md](docs/local_start.md).
+- Verified: the full local stack is Python/FastAPI + Vue 3 + Go services + PostgreSQL, with startup documented in [docs/local_start.md](docs/local_start.md).
 - Verified: the stack exposes observability/debug endpoints for state mismatches, including physical/service/analytics truth diagnostics.
 - Optional: Go optical, batch, status, and port-summary services can run alongside the backend; the backend can fall back or degrade when they are unavailable.
 - Current architecture: EventStore records write-path audit/projection events in a dual-write system. The project is not fully event-sourced.
 - Known drift: [RECOVERY_STATUS.md](RECOVERY_STATUS.md) records dated recovery validation, known stale tests, and suites that had not yet been fully re-run during recovery.
-- Out of scope in this recovered snapshot: VLAN support remains future work.
+- Out of scope in this snapshot: VLAN support remains future work.
 
 ## License
 

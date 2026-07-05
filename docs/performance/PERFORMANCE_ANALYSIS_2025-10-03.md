@@ -897,7 +897,7 @@ If 1000 devices still too slow after Python optimization:
 
 ### Traffic Engine Profile (200 devices, 5 ticks)
 
-**File:** `traffic_profile_200dev.stats` / `traffic_profile_200dev.txt`
+**Artifact:** archived 200-device traffic profile output
 
 ```
 Total: 18.037 seconds (3.6s per tick)
@@ -920,7 +920,7 @@ Primitive calls: 15,318,903
 
 ### Status Recompute Profile (200 devices, 1 run)
 
-**File:** `status_profile_200dev.stats` / `status_profile_200dev.txt`
+**Artifact:** archived 200-device status profile output
 
 ```
 Total: 3.471 seconds

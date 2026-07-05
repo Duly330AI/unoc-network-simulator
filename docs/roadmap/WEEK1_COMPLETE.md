@@ -153,7 +153,7 @@ Ready for Week 2: YES ✅
 
 **Integration Tests:**
 
-- `test_grpc_integration.py` (146 lines) - 3/3 tests PASS
+- `tools/dev/test_grpc_integration.py` (146 lines) - 3/3 tests PASS
 
 **Service Scripts:**
 
@@ -183,7 +183,7 @@ Ready for Week 2: YES ✅
 
 ## Integration Test Results
 
-### Test Suite: test_grpc_integration.py
+### Test Suite: tools/dev/test_grpc_integration.py
 
 ```
 Week 1 Day 4: Go gRPC Integration Test
@@ -212,7 +212,7 @@ Status: Week 1 integration successful
 
 ```powershell
 # Run integration tests
-python -m pytest -q test_grpc_integration.py
+python -m pytest -q tools/dev/test_grpc_integration.py
 
 # Start all services
 .\scripts\start_services.ps1
@@ -467,7 +467,7 @@ See `docs/roadmap/OPERATION-STABLE-FOUNDATION.md` for detailed migration plan.
 
 4. **Run Integration Tests**
    ```powershell
-   python -m pytest -q test_grpc_integration.py
+   python -m pytest -q tools/dev/test_grpc_integration.py
    ```
 
 ### Key Documentation

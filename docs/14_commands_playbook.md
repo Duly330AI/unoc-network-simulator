@@ -1,163 +1,105 @@
 # 14. Commands Playbook
 
-This playbook lists operational commands for setup, development, testing, quality checks, and performance runs.
+This playbook lists current local commands for the Python/FastAPI + Go services + Vue stack.
 
-Stack context:
-- Node.js + TypeScript (`tsx`)
-- Express + Prisma
-- Vite client build pipeline
+For the verified end-to-end startup guide, prefer [local_start.md](local_start.md).
 
-## 1. Prerequisites
+## 1. Stack context
 
-Required locally:
-- Node.js (project-compatible modern LTS)
-- npm
-- SQLite for local DB file workflows (or configured external DB)
+- Backend: Python/FastAPI, SQLModel/SQLAlchemy, PostgreSQL.
+- Frontend: Vue 3 + Pinia + D3 in `unoc-frontend-v2/`.
+- Services: Go traffic engine on `:8080`; optional Go gRPC helpers on `:50051-50054`.
+- Realtime: backend WebSocket endpoint under `/api/ws`.
 
-Optional for perf load tests:
-- `artillery` (used by `npm run perf:load`)
+## 2. One-time setup
 
-## 2. Environment Setup
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 
-## 2.1 Install Dependencies
-
-```bash
-npm install
+cd unoc-frontend-v2
+npm ci
+cd ..
 ```
 
-## 2.2 Environment Variables
+Build Go service binaries when needed:
 
-Create `.env` (for example from `.env.example`) and define at minimum:
-- `DATABASE_URL`
-
-Optional/feature-specific:
-- `GEMINI_API_KEY`
-- `APP_URL`
-- simulation/perf flags as required by runtime
-
-## 2.3 Prisma Bootstrap
-
-```bash
-npx prisma generate
-npx prisma db push
+```powershell
+cd engine-go
+go build -o bin/traffic-engine.exe ./cmd/traffic-engine/
+go build -o bin/optical-service.exe ./cmd/optical-service/
+go build -o bin/batch-service.exe ./cmd/batch-service/
+go build -o bin/status-service.exe ./cmd/status-service/
+go build -o bin/port-summary-service.exe ./cmd/port-summary-service/
+cd ..
 ```
 
-Optional DB inspection:
+## 3. Local start
 
-```bash
-npx prisma studio
+Preferred logged start:
+
+```powershell
+.\scripts\start-stack-logged.ps1 -IncludeOptionalGoServices
+.\scripts\status-stack.ps1
 ```
 
-## 3. Development Commands
+Manual start order is documented in [local_start.md](local_start.md):
 
-## 3.1 Run App in Development Mode
+1. PostgreSQL
+2. Go traffic engine
+3. FastAPI backend
+4. Vue/Vite frontend
+5. Optional Go gRPC helpers
 
-```bash
-npm run dev
+## 4. Health checks
+
+```powershell
+curl.exe -s http://127.0.0.1:8080/health
+curl.exe -s http://127.0.0.1:5001/api/health
+curl.exe -s http://127.0.0.1:5001/api/debug/full-snapshot
 ```
 
-Current script:
-- `node --import tsx server.ts`
+The debug snapshot requires `UNOC_DEV_FEATURES=1` on the backend.
 
-Behavior:
-- starts backend runtime and serves frontend through configured dev integration
-- local URL is environment/runtime dependent (do not hardcode docs to one host/port)
+## 5. Quality checks
 
-## 3.2 Clean Build Artifacts
+Backend compile check:
 
-```bash
-npm run clean
+```powershell
+python -m compileall backend
 ```
 
-## 4. Test and Quality Commands
+Frontend type check:
 
-## 4.1 Run Full Test Suite
-
-```bash
-npm test
+```powershell
+cd unoc-frontend-v2
+npm run type-check
+cd ..
 ```
 
-## 4.2 Run Smoke Tests Only
+Focused backend tests should use the audit venv when local dependencies differ:
 
-```bash
-npm run test:smoke
+```powershell
+.\.venv-audit\Scripts\python.exe -m pytest backend/tests/test_dependency_resolver_cache.py
 ```
 
-## 4.3 Type/Lint Check
+## 6. Performance harness
+
+Reusable L3 recompute micro-benchmark:
 
 ```bash
-npm run lint
+export PYTHONPATH=.
+DATABASE_URL="sqlite:///bench_l3.db" BENCH_N=200 .venv-audit/Scripts/python.exe backend/tests/perf/bench_l3_recompute.py
+rm -f bench_l3.db
 ```
 
-## 4.4 Production Build
+See [performance.md](performance.md) for scope and measured results.
 
-```bash
-npm run build
+## 7. Shutdown
+
+```powershell
+.\scripts\stop-stack.ps1 -DryRun
+.\scripts\stop-stack.ps1
 ```
 
-## 4.5 Preview Built Client
-
-```bash
-npm run preview
-```
-
-## 5. Performance Harness Commands
-
-## 5.1 Seed Benchmark Dataset
-
-```bash
-npm run perf:seed
-```
-
-Current script target:
-- `tsx server/scripts/perf-seed.ts`
-
-## 5.2 Execute Load Scenario
-
-```bash
-npm run perf:load
-```
-
-Current script target:
-- `artillery run perf/load-test.yml`
-
-## 6. Recommended Local Run Order
-
-```bash
-npm install
-npx prisma generate
-npx prisma db push
-npm run dev
-```
-
-Before merge/release checks:
-
-```bash
-npm run lint
-npm test
-npm run build
-```
-
-## 7. Troubleshooting Quick Notes
-
-- Prisma/client mismatch after dependency updates:
-  - rerun `npx prisma generate`
-- DB schema drift in local dev:
-  - rerun `npx prisma db push` on intended target DB
-- Perf load command fails:
-  - verify `artillery` availability and `perf/load-test.yml` presence
-
-## 8. CI Mapping
-
-Minimum CI gates map to:
-- `npm run lint`
-- `npm test`
-- `npm run build`
-
-Performance scripts are optional in baseline CI and can run in dedicated perf profiles.
-
-## 9. Cross-Document Contract
-
-- `12_testing_and_performance_harness.md`: quality/perf strategy and gates
-- `13_api_reference.md`: API surface validated by tests and load scenarios
-- `ARCHITECTURE.md`: component/service context for commands
+Use `-Force` only after reviewing `-DryRun` output.
