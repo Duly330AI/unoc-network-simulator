@@ -88,7 +88,7 @@ def _try_connect(self):
 
 ### 3. Integration Tests PASS ✅
 
-**Test Script:** `test_grpc_integration.py`
+**Test Script:** `tools/dev/test_grpc_integration.py`
 
 **Results:**
 
@@ -292,7 +292,7 @@ DATABASE_URL=postgresql://unoc:unocpw@localhost:5432/unocdb
 
 ### Integration Test Coverage
 
-**test_grpc_integration.py:**
+**tools/dev/test_grpc_integration.py:**
 
 - ✅ Protobuf stub imports (backend.proto.\*)
 - ✅ Client creation (all 3 services)
@@ -306,7 +306,7 @@ DATABASE_URL=postgresql://unoc:unocpw@localhost:5432/unocdb
 .\scripts\start_services.ps1
 
 # 2. Run integration tests
-python test_grpc_integration.py
+python tools/dev/test_grpc_integration.py
 
 # 3. Test Python client directly
 python
@@ -397,7 +397,7 @@ python
 
 **Created:**
 
-- `test_grpc_integration.py`: 146 lines
+- `tools/dev/test_grpc_integration.py`: 146 lines
 - `start_services.ps1`: 121 lines
 - `stop_services.ps1`: 31 lines
 

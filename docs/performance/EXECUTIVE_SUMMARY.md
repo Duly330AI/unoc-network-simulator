@@ -311,8 +311,8 @@ Go Traffic Engine (New)
 
 ### Profiling Data (Python Baseline)
 
-- `traffic_profile_perf005_after.stats` - Traffic engine after PERF-005
-- `traffic_profile_perf005_after.txt` - Human-readable call stack
+- Archived traffic-engine profile output after PERF-005
+- Archived human-readable traffic call stack
 - Profile HTML: `/tmp/unoc-perf-*/profile-*.html` (pyinstrument)
 
 ### Architecture

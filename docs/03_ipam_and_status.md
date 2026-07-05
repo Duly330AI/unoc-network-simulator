@@ -1,11 +1,12 @@
 # 03. IPAM and Status Logic
 
-This document defines the authoritative behavior for IP allocation, effective status evaluation, passability semantics, event ordering, and observability in the current AI Studio stack.
+This document defines the authoritative behavior for IP allocation, effective status evaluation, passability semantics, event ordering, and observability in the current UNOC stack.
 
 Stack context:
-- Backend: Node.js + Express + Prisma + Socket.io
-- Frontend: React + TypeScript + React Flow
-- Database: SQLite/Postgres via Prisma
+- Backend: Python/FastAPI + SQLModel/SQLAlchemy
+- Frontend: Vue 3 + Pinia + D3
+- Database: PostgreSQL in local stack; SQLite is used by selected isolated tests/benchmarks
+- Realtime: WebSocket deltas from the FastAPI backend
 
 ## 1. IPAM (Lazy Allocation)
 
@@ -57,23 +58,23 @@ P2P uplink interfaces:
 
 ## 1.4 Allocation Flow (Pseudocode)
 
-```ts
-async function provisionWithIpam(deviceId: string) {
-  await prisma.$transaction(async (tx) => {
-    const device = await tx.device.findUniqueOrThrow({ where: { id: deviceId } });
+```python
+def provision_with_ipam(session, device_id: str):
+    device = session.get(Device, device_id)
+    if device is None:
+        raise NotFound()
 
-    const role = classifyPrefixRole(device.type); // core_mgmt|olt_mgmt|aon_mgmt|ont_mgmt|cpe_mgmt
-    await ensureIpamDefaults(tx);
+    role = classify_prefix_role(device.type)  # core_mgmt|olt_mgmt|aon_mgmt|ont_mgmt|cpe_mgmt
+    ensure_ipam_defaults(session)
 
-    const prefix = await findPrefixByRole(tx, role);
-    const allocation = await allocateNextFreeIp(tx, prefix);
+    prefix = find_prefix_by_role(session, role)
+    allocation = allocate_next_free_ip(session, prefix)
 
-    await createManagementInterface(tx, device.id, allocation.ip, allocation.prefixLen);
-    await markProvisioned(tx, device.id);
-  });
+    create_management_interface(session, device.id, allocation.ip, allocation.prefix_len)
+    mark_provisioned(session, device.id)
+    session.commit()
 
-  await triggerStatusPhase1(deviceId);
-}
+    trigger_status_phase1(device.id)
 ```
 
 ## 1.5 Constraints and Failure Modes

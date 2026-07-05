@@ -99,5 +99,5 @@ Write-Host "Logs are visible in separate PowerShell windows." -ForegroundColor Y
 Write-Host "Press Ctrl+C in each window to stop a service." -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Test health checks:" -ForegroundColor Cyan
-Write-Host "  python test_grpc_integration.py" -ForegroundColor White
+Write-Host "  python tools/dev/test_grpc_integration.py" -ForegroundColor White
 Write-Host ""

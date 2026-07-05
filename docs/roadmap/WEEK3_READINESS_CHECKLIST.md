@@ -52,7 +52,7 @@
 
 ### Primary Context File
 
-- ✅ `prompts/README.MD.prompt.md` - **3 sections updated**
+- ✅ Legacy build prompt README - **3 sections updated**
   1. **Section 5.2 Header**: Updated date to Oct 5, 2025; changed status to "Week 2 COMPLETE (Status Propagation + Optical PathFinder, 30,000× + 4,000× speedups)"; added Optical PathFinder achievements
   2. **Week 3 Goals**: Changed status from "IN PROGRESS" to "READY TO START"; added complete Day 17 section with all metrics
   3. **Hybrid Architecture Diagram**: Updated Optical PathFinder from "🚀 Week 3 Days 16-17" to "✅ Day 17 DONE"; updated Batch Operations to "⏳ Days 13-15 PARTIAL"
@@ -67,7 +67,7 @@
 
 ### LLM Toolset Configuration
 
-- ✅ `prompts/LLMTOOL.toolsets.jsonc` - **Description updated**
+- ✅ Legacy LLM toolset prompt config - **Description updated**
   - Changed from: "Updated for Week 3 (Batch Operations + Optical Compute)"
   - Changed to: "Week 3 READY (Traffic 5×, Status 30,000×, Optical 4,000× speedups complete)"
 

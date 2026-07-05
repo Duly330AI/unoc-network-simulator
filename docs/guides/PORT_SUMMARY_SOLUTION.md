@@ -50,14 +50,7 @@ fetchOnce @ usePortSummary.ts:36
 
 **Test Result:**
 
-```bash
-$ python test_bulk_ports.py
-✅ Bulk endpoint works!
-Status: 200
-Duration: 33.05ms
-SQL queries: 0 (cache hit proof!)
-Response: {'test-bulk-1': [], 'test-bulk-2': []}
-```
+Manual validation used an ad-hoc bulk-port helper during development. That root helper was later removed because it created temporary devices directly; use the backend port-summary tests and frontend type checks for repeatable validation.
 
 ### Frontend Optimization (Phase B) ✅
 
@@ -196,15 +189,7 @@ if (this.subscriptions.size === 1 && !this.timer) {
 
 ### Manual Test (Already Done)
 
-**File:** `test_bulk_ports.py`
-
-```bash
-$ python test_bulk_ports.py
-✅ Bulk endpoint works!
-Status: 200
-Duration: 33.05ms
-SQL queries: 0 (cache hit!)
-```
+The original ad-hoc helper was removed after pytest coverage replaced it.
 
 ### Reproduction Test (Recommended)
 

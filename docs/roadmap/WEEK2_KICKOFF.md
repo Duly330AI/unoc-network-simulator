@@ -507,7 +507,7 @@ python scripts/benchmark_optical.py
 **Tools:**
 
 - `scripts/benchmark_optical.py` - Performance testing
-- `test_grpc_integration.py` - Integration testing
+- `tools/dev/test_grpc_integration.py` - Integration testing
 - `start_services.ps1` - Service management
 
 ---

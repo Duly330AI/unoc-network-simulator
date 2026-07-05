@@ -1,7 +1,8 @@
 # MASTER_SPEC_UNOC_LITE.md
 
 > Archive Note (2026-03-07): Dieses Dokument ist nur noch High-Level-Grundgerüst.\
-> Operativer Source-of-Truth ist `docs/ROADMAP.md` plus die Fachdokumente `docs/01..13`.
+> Operativer Source-of-Truth ist `docs/ROADMAP.md` plus die Fachdokumente `docs/01..14`.
+> Die aktuelle Runtime ist Python/FastAPI + Vue 3 + Go Services + PostgreSQL; siehe `README.md` und `docs/local_start.md`.
 
 ## Project Goal
 Build a full-stack FTTH Network Live Simulator web application.
@@ -13,38 +14,28 @@ The application allows users to:
 - detect failures
 - visualize device status in real time
 
-Simulation runs entirely in the browser. Backend stores topology data.
+Simulation state is owned by the backend and rendered by the frontend in real time.
 
 ## Stack
 Frontend
-- React
-- TypeScript
-- React Flow
-- Tailwind CSS
-- Zustand
+- Vue 3
+- Pinia
+- D3 SVG topology canvas
 
 Backend
-- Node.js
-- Express.js
+- Python/FastAPI
+- Go services for traffic and selected compute helpers
 
 Database
-- SQLite
-- Prisma ORM
+- PostgreSQL
 
 ## Project Structure
 /unoc-simulator
-  /server
-    server.ts
-    routes/
-    services/
-    prisma/
-  /client
-    src/
-      components/
-      simulation/
-      store/
-      pages/
-  /shared/types
+  /backend
+  /unoc-frontend-v2
+  /engine-go
+  /docs
+  /scripts
 
 ## Database Schema
 

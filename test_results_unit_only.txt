@@ -1,5 +1,0 @@
-
-[PERF] Using PostgreSQL: postgresql://unoc:unocpw@localhost:5432/unocdb
-[PERF] Re-initialized backend.db engine: Engine(postgresql+psycopg://unoc:***@localhost:5432/unocdb)
-..................................................F..................... [ 25%]
-.........................................................
